@@ -1,0 +1,78 @@
+<!DOCTYPE HTML><html>
+<head>
+  <title>WRZT LED Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: inline-block; text-align: center; }
+    body { background-color: #1a1a2e; color: white; margin:0; }
+    .header { background: linear-gradient(90deg, #16213e, #0f3460); padding: 20px; font-size: 1.5rem; }
+    .container { padding: 30px; display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
+    
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 20px;
+      width: 150px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+    
+    .button {
+      padding: 15px 25px;
+      font-size: 18px;
+      text-align: center;
+      cursor: pointer;
+      outline: none;
+      color: #fff;
+      background-color: #e94560;
+      border: none;
+      border-radius: 10px;
+      transition: 0.3s;
+      width: 100%;
+    }
+    .button:active { background-color: #0f3460; transform: translateY(4px); }
+    .status { margin-top: 15px; font-size: 0.9rem; color: #add8e6; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>WRZT - Lichtsteuerung</h1>
+  </div>
+  <div class="container">
+    <div class="card">
+      <h3>LED 1</h3>
+      <button class="button" onclick="toggleLED(1)">TOGGLE</button>
+      <div class="status" id="state1">Status: Unbekannt</div>
+    </div>
+    <div class="card">
+      <h3>LED 2</h3>
+      <button class="button" onclick="toggleLED(2)">TOGGLE</button>
+      <div class="status" id="state2">Status: Unbekannt</div>
+    </div>
+    <div class="card">
+      <h3>LED 3</h3>
+      <button class="button" onclick="toggleLED(3)">TOGGLE</button>
+      <div class="status" id="state3">Status: Unbekannt</div>
+    </div>
+    <div class="card">
+      <h3>LED 4</h3>
+      <button class="button" onclick="toggleLED(4)">TOGGLE</button>
+      <div class="status" id="state4">Status: Unbekannt</div>
+    </div>
+  </div>
+
+<script>
+function toggleLED(id) {
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", "/update?output=" + id, true);
+  xhr.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById("state" + id).innerHTML = "Status: " + this.responseText;
+    }
+  };
+  xhr.send();
+}
+</script>
+</body>
+</html>
