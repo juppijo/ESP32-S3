@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 GPIO Master</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --text: #f8fafc;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        h1, h2 { color: var(--accent); margin-top: 0; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        button {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: #334155;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:active { transform: scale(0.95); }
+        .btn-on { background: var(--success); }
+        .btn-off { background: var(--danger); }
+
+        .status-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        #log {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .led-indicator {
+            height: 12px;
+            width: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            background: #444;
+        }
+        .led-active { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>GPIO Control</h1>
+
+    <div class="card">
+        <h2>Outputs (Relais/LED)</h2>
+        <p>GPIO 2 Steuerung:</p>
+        <div class="grid">
+            <button class="btn-on" onclick="sendCmd(2, 1)">EINSCHALTEN</button>
+            <button class="btn-off" onclick="sendCmd(2, 0)">AUSSCHALTEN</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Inputs (Sensoren)</h2>
+        <div class="status-box">
+            <span>GPIO 4 Status:</span>
+            <span id="pin4-val">Lade...</span>
+            <div id="led4" class="led-indicator"></div>
+        </div>
+        <button style="width:100%; margin-top:10px;" onclick="readPin(4)">Status aktualisieren</button>
+    </div>
+
+    <div id="log">Bereit für Befehle...</div>
+</div>
+
+<script>
+    const log = document.getElementById('log');
+
+    // Funktion zum Senden (Output)
+    function sendCmd(pin, state) {
+        log.innerText = "Sende an Pin " + pin + "...";
+        fetch(`/set?pin=${pin}&state=${state}`)
+            .then(response => response.text())
+            .then(data => {
+                log.innerText = "Server: " + data;
+            })
+            .catch(err => {
+                log.innerText = "Fehler: " + err;
+            });
+    }
+
+    // Funktion zum Lesen (Input)
+    function readPin(pin) {
+        log.innerText = "Lese Pin " + pin + "...";
+        fetch(`/read?pin=${pin}`)
+            .then(response => response.text())
+            .then(val => {
+                const display = document.getElementById(`pin${pin}-val`);
+                const led = document.getElementById(`led${pin}`);
+                
+                display.innerText = (val == "1") ? "HIGH (An)" : "LOW (Aus)";
+                
+                if(val == "1") {
+                    led.classList.add('led-active');
+                } else {
+                    led.classList.remove('led-active');
+                }
+                log.innerText = "Pin " + pin + " aktualisiert.";
+            })
+            .catch(err => {
+                log.innerText = "Fehler beim Lesen: " + err;
+            });
+    }
+
+    // Automatisches Update alle 5 Sekunden
+    setInterval(() => readPin(4), 5000);
+</script>
+
+</body>
+</html>
