@@ -121,14 +121,23 @@
 
     // Funktion zum Senden (Output)
     function sendCmd(pin, state) {
-        log.innerText = "Sende an Pin " + pin + "...";
+        const log = document.getElementById('log');
+        log.innerText = "Sende Pin " + pin + " -> " + state + "...";
+
+        // WICHTIG: Der Schrägstrich am Anfang sorgt dafür, 
+        // dass die IP des ESP32 genutzt wird.
         fetch(`/set?pin=${pin}&state=${state}`)
-            .then(response => response.text())
+            .then(response => {
+                if (!response.ok) throw new Error('Netzwerk-Antwort war nicht ok');
+                return response.text();
+            })
             .then(data => {
-                log.innerText = "Server: " + data;
+                log.innerText = "Server sagt: " + data;
+                console.log("Erfolg:", data);
             })
             .catch(err => {
                 log.innerText = "Fehler: " + err;
+                console.error("Fetch-Fehler:", err);
             });
     }
 
