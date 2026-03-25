@@ -712,7 +712,9 @@ async function setColor(color) {
     if (DEMO_MODE) {
       toast('Demo: LED → ' + color.toUpperCase(), 'warn');
     } else {
-      await fetch((API_BASE || window.location.origin) + '/set?color=' + color);
+      // await fetch((API_BASE || window.location.origin) + '/set?color=' + color);
+      // Ändere diese Zeile in deiner async function setColor(color):
+      await fetch((API_BASE || window.location.origin) + '/rgb?color=' + color);
       toast('LED → ' + color.toUpperCase());
     }
   } catch (e) {
