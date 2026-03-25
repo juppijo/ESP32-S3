@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  </head>
+<body>
+  
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WRZT · GPIO Master</title>
+  <style>
+    :root {
+      --bg:        #080d14;
+      --surface:   #0e1621;
+      --card:      #131d2d;
+      --border:    rgba(56, 189, 248, 0.15);
+      --accent:    #38bdf8;
+      --accent2:   #0ea5e9;
+      --on:        #22c55e;
+      --off:       #ef4444;
+      --warn:      #f59e0b;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --font-ui:   sans-serif;
+      --font-mono: monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 16px;
+      min-height: 100vh;
+      padding: 16px;
+      background-image:
+        linear-gradient(rgba(56,189,248,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(56,189,248,.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+
+    .wrapper {
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .logo {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    h1 {
+      font-family: var(--font-ui);
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: .05em;
+      color: var(--accent);
+      line-height: 1;
+    }
+    h1 small { display: block; font-size: .75rem; color: var(--muted); font-weight: 400; margin-top: 3px; }
+
+    #conn-badge {
+      margin-left: auto;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: .75rem;
+      font-family: var(--font-mono);
+      background: rgba(100,116,139,.2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+      transition: .4s;
+    }
+    #conn-badge.online  { background: rgba(34,197,94,.12);  color: var(--on);  border-color: rgba(34,197,94,.3); }
+    #conn-badge.offline { background: rgba(239,68,68,.12);  color: var(--off); border-color: rgba(239,68,68,.3); }
+    #conn-badge.demo    { background: rgba(245,158,11,.12); color: var(--warn); border-color: rgba(245,158,11,.3); }
+
+    #demo-toggle {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: .75rem;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      border: 1px solid rgba(245,158,11,.4);
+      background: rgba(245,158,11,.08);
+      color: var(--warn);
+      transition: .2s;
+      white-space: nowrap;
+    }
+    #demo-toggle:hover { background: rgba(245,158,11,.2); }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), transparent);
+      opacity: .5;
+    }
+
+    .card-title {
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+
+    .pin-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+    .pin-row:last-child { border-bottom: none; }
+
+    .pin-label { flex: 1; min-width: 0; }
+    .pin-label strong { display: block; font-size: .95rem; font-weight: 600; }
+    .pin-label span   { font-size: .75rem; color: var(--muted); font-family: var(--font-mono); }
+
+    .toggle { position: relative; width: 48px; height: 26px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute; inset: 0;
+      background: #1e293b;
+      border-radius: 13px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: .3s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--on); border-color: var(--on); }
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      transition: .25s cubic-bezier(.34,1.56,.64,1);
+    }
+    .toggle input:checked + .toggle-track::after { transform: translateX(22px); }
+
+    .led {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #1e293b;
+      flex-shrink: 0;
+      transition: .3s;
+    }
+    .led.on  { background: var(--on);  box-shadow: 0 0 8px var(--on); }
+    .led.off { background: var(--off); box-shadow: 0 0 6px var(--off); }
+
+    .pwm-wrap { flex: 1; display: flex; align-items: center; gap: 8px; }
+    input[type=range] {
+      -webkit-appearance: none;
+      flex: 1; height: 4px;
+      border-radius: 2px;
+      background: #1e293b;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: .15s;
+    }
+    input[type=range]::-webkit-slider-thumb:active { transform: scale(1.3); }
+    .pwm-val {
+      font-family: var(--font-mono);
+      font-size: .75rem;
+      color: var(--accent);
+      min-width: 28px;
+      text-align: right;
+    }
+
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,.04);
+    }
+    .input-row:last-child { border-bottom: none; }
+
+    .input-val {
+      font-family: var(--font-mono);
+      font-size: .8rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(0,0,0,.3);
+      border: 1px solid var(--border);
+      min-width: 74px;
+      text-align: center;
+    }
+    .input-val.high { color: var(--on);  border-color: rgba(34,197,94,.4); }
+    .input-val.low  { color: var(--off); border-color: rgba(239,68,68,.4); }
+
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .info-item {
+      background: rgba(0,0,0,.3);
+      border-radius: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+    }
+    .info-item label { display: block; font-size: .65rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .info-item value { font-family: var(--font-mono); font-size: .85rem; color: var(--accent); }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: .2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover { background: rgba(56,189,248,.1); border-color: var(--accent); color: var(--accent); }
+    .btn:active { transform: scale(.96); }
+    .btn.danger:hover { background: rgba(239,68,68,.1); border-color: var(--off); color: var(--off); }
+
+    .auto-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      font-size: .8rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .auto-label input { accent-color: var(--accent); }
+
+    #toast-container {
+      position: fixed;
+      bottom: 20px; right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 9999;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-family: var(--font-mono);
+      font-size: .78rem;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      animation: slideIn .3s ease, fadeOut .3s ease 2.5s forwards;
+      max-width: 280px;
+    }
+    .toast.ok  { border-color: rgba(34,197,94,.4);  color: var(--on); }
+    .toast.err { border-color: rgba(239,68,68,.4);  color: var(--off); }
+    .toast.warn { border-color: rgba(245,158,11,.4); color: var(--warn); }
+    @keyframes slideIn { from { opacity:0; transform:translateX(20px); } }
+    @keyframes fadeOut { to   { opacity:0; transform:translateX(20px); } }
+
+    #loading {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 16px;
+      z-index: 100;
+      transition: opacity .5s;
+    }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+    .spin {
+      width: 44px; height: 44px;
+      border: 3px solid var(--surface);
+      border-top: 3px solid var(--accent);
+      border-radius: 50%;
+      animation: rot 1s linear infinite;
+    }
+    @keyframes rot { to { transform: rotate(360deg); } }
+    #loading p { color: var(--muted); font-size: .9rem; font-family: var(--font-mono); }
+
+    .console-log {
+      background: #050a10;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      height: 160px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: .75rem;
+      line-height: 1.6;
+      margin-bottom: 10px;
+      scroll-behavior: smooth;
+    }
+    .console-log::-webkit-scrollbar { width: 4px; }
+    .console-log::-webkit-scrollbar-track { background: transparent; }
+    .console-log::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+
+    .log-line  { display: flex; gap: 8px; }
+    .log-time  { color: #334155; flex-shrink: 0; }
+    .log-cmd   { color: var(--accent); }
+    .log-ok    { color: var(--on); }
+    .log-err   { color: var(--off); }
+    .log-info  { color: var(--warn); }
+    .log-hint  { color: #475569; font-style: italic; }
+
+    .console-input-row { display: flex; gap: 8px; align-items: center; }
+    .console-prompt {
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: .85rem;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    #cmd-input {
+      flex: 1;
+      background: #050a10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: .82rem;
+      outline: none;
+      transition: border-color .2s;
+      caret-color: var(--accent);
+    }
+    #cmd-input:focus { border-color: var(--accent); }
+    #cmd-input::placeholder { color: #334155; }
+
+    #cmd-send {
+      padding: 8px 14px;
+      background: rgba(56,189,248,.12);
+      border: 1px solid rgba(56,189,248,.3);
+      border-radius: 8px;
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: .82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: .2s;
+      flex-shrink: 0;
+    }
+    #cmd-send:hover { background: rgba(56,189,248,.25); }
+    #cmd-send:active { transform: scale(.95); }
+
+    .cmd-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chip {
+      padding: 3px 9px;
+      border-radius: 20px;
+      background: rgba(56,189,248,.07);
+      border: 1px solid rgba(56,189,248,.18);
+      color: #94a3b8;
+      font-family: var(--font-mono);
+      font-size: .7rem;
+      cursor: pointer;
+      transition: .15s;
+      user-select: none;
+    }
+    .chip:hover { background: rgba(56,189,248,.18); color: var(--accent); }
+
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .color-btn {
+      padding: 10px 6px;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 9px;
+      font-size: .82rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      transition: .2s;
+      letter-spacing: .04em;
+    }
+    .color-btn:hover  { filter: brightness(1.25); transform: scale(1.04); }
+    .color-btn:active { transform: scale(.97); }
+    .color-btn.c-red     { background: #7f1d1d; color: #fca5a5; border-color: #dc2626; }
+    .color-btn.c-green   { background: #14532d; color: #86efac; border-color: #16a34a; }
+    .color-btn.c-blue    { background: #1e3a5f; color: #93c5fd; border-color: #2563eb; }
+    .color-btn.c-yellow  { background: #713f12; color: #fde68a; border-color: #d97706; }
+    .color-btn.c-magenta { background: #4a1942; color: #f0abfc; border-color: #a21caf; }
+    .color-btn.c-aqua    { background: #164e63; color: #67e8f9; border-color: #0891b2; }
+    .color-btn.c-orange  { background: #7c2d12; color: #fdba74; border-color: #ea580c; }
+    .color-btn.c-white   { background: #1e293b; color: #e2e8f0; border-color: #94a3b8; }
+    .color-btn.c-off     { background: #0f172a; color: #475569; border-color: #334155; }
+
+    .led-preview-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0 4px;
+    }
+    #sys-led-orb {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: #1e293b;
+      border: 2px solid #334155;
+      transition: background .3s, box-shadow .3s;
+      flex-shrink: 0;
+    }
+    #sys-led-label {
+      font-family: var(--font-mono);
+      font-size: .8rem;
+      color: var(--muted);
+    }
+
+    .zami-input-area {
+      background: rgba(0,0,0,.25);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: .85rem;
+      color: var(--muted);
+      min-height: 60px;
+    }
+
+    .demo-banner {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      background: rgba(245,158,11,.07);
+      border: 1px solid rgba(245,158,11,.25);
+      border-radius: 10px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      font-size: .8rem;
+      color: var(--warn);
+      font-family: var(--font-mono);
+    }
+    .demo-banner.visible { display: flex; }
+    .demo-banner span { flex: 1; }
+  </style>
+
+<div id="loading">
+  <div class="spin"></div>
+  <p id="loading-msg">Verbinde mit ESP32…</p>
+</div>
+
+<div id="toast-container"></div>
+
+<div class="wrapper">
+
+  <header>
+    <div class="logo">⚡</div>
+    <h1>WRZT · GPIO Master <small>ESP32-S3 · WebUI</small></h1>
+    <button id="demo-toggle" onclick="toggleDemo()">Demo</button>
+    <div id="conn-badge">● Verbinde…</div>
+  </header>
+
+  <div class="demo-banner" id="demo-banner">
+    <span>⚠ Demo-Modus aktiv — keine echte Hardware verbunden</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💡 Lichtsteuerung · System-LED</div>
+    <div class="led-preview-row">
+      <div id="sys-led-orb"></div>
+      <span id="sys-led-label">LED aus</span>
+    </div>
+    <div class="color-grid" style="margin-top:12px">
+      <button class="color-btn c-red"     onclick="setColor('red')">ROT</button>
+      <button class="color-btn c-green"   onclick="setColor('green')">GRÜN</button>
+      <button class="color-btn c-blue"    onclick="setColor('blue')">BLAU</button>
+      <button class="color-btn c-yellow"  onclick="setColor('yellow')">YELLOW</button>
+      <button class="color-btn c-magenta" onclick="setColor('magenta')">MAGENTA</button>
+      <button class="color-btn c-aqua"    onclick="setColor('aqua')">AQUA</button>
+      <button class="color-btn c-orange"  onclick="setColor('orange')">ORANGE</button>
+      <button class="color-btn c-white"   onclick="setColor('white')">WHITE</button>
+      <button class="color-btn c-off"     onclick="setColor('off')">AUS</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">▶ Digital Outputs</div>
+    <div id="outputs-container"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">〜 PWM Outputs</div>
+    <div id="pwm-container"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">◀ Digital Inputs</div>
+    <div id="inputs-container"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">ℹ System Info</div>
+    <div class="info-grid">
+      <div class="info-item"><label>IP-Adresse</label><value id="info-ip">—</value></div>
+      <div class="info-item"><label>Hostname</label>  <value id="info-host">—</value></div>
+      <div class="info-item"><label>RSSI</label>       <value id="info-rssi">—</value></div>
+      <div class="info-item"><label>Uptime</label>     <value id="info-uptime">—</value></div>
+      <div class="info-item"><label>Freier Heap</label><value id="info-heap">—</value></div>
+      <div class="info-item"><label>Chip</label>       <value id="info-chip">—</value></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📝 Zami Input</div>
+    <div class="zami-input-area" id="zami-info">Zaminia &amp; Jo — © 2026</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⌨ Befehlskonsole</div>
+    <div class="console-log" id="console-log">
+      <div class="log-line"><span class="log-hint">── WRZT GPIO Konsole bereit ──</span></div>
+      <div class="log-line"><span class="log-hint">Tippe <b style="color:#38bdf8">help</b> für alle Befehle</span></div>
+    </div>
+    <div class="console-input-row">
+      <span class="console-prompt">ESP32&gt;</span>
+      <input id="cmd-input" type="text" placeholder="z.B.  set 2 1  |  pwm 13 128  |  read 4" autocomplete="off" spellcheck="false">
+      <button id="cmd-send" onclick="runCmd()">↵</button>
+    </div>
+    <div class="cmd-chips">
+      <span class="chip" onclick="fillCmd('help')">help</span>
+      <span class="chip" onclick="fillCmd('status')">status</span>
+      <span class="chip" onclick="fillCmd('info')">info</span>
+      <span class="chip" onclick="fillCmd('set 2 1')">set 2 1</span>
+      <span class="chip" onclick="fillCmd('set 2 0')">set 2 0</span>
+      <span class="chip" onclick="fillCmd('pwm 13 128')">pwm 13 128</span>
+      <span class="chip" onclick="fillCmd('read 4')">read 4</span>
+      <span class="chip" onclick="fillCmd('alloff')">alloff</span>
+      <span class="chip" onclick="fillCmd('clear')">clear</span>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn" onclick="refreshAll()">⟳ Aktualisieren</button>
+    <button class="btn danger" onclick="allOff()">✕ Alles aus</button>
+    <label class="auto-label">
+      <input type="checkbox" id="auto-refresh" checked>
+      Auto (5 s)
+    </label>
+  </div>
+
+  <p style="text-align:center;font-size:.7rem;color:#1e293b;margin-top:20px;font-family:monospace">Zaminia System Status: Online · WRZT © 2026</p>
+
+</div>
+
+<script>
+const COLOR_MAP = {
+  red:     { bg: '#dc2626', shadow: '#dc2626' },
+  green:   { bg: '#16a34a', shadow: '#16a34a' },
+  blue:    { bg: '#2563eb', shadow: '#2563eb' },
+  yellow:  { bg: '#d97706', shadow: '#d97706' },
+  magenta: { bg: '#a21caf', shadow: '#a21caf' },
+  aqua:    { bg: '#0891b2', shadow: '#0891b2' },
+  orange:  { bg: '#ea580c', shadow: '#ea580c' },
+  white:   { bg: '#e2e8f0', shadow: '#94a3b8' },
+  off:     { bg: '#1e293b', shadow: 'transparent' },
+};
+
+const DEMO_DATA = {
+  status: {
+    pins: [
+      { pin: 2,  label: 'LED Blau',  output: true,  value: 0 },
+      { pin: 4,  label: 'Relay 1',   output: true,  value: 1 },
+      { pin: 5,  label: 'Relay 2',   output: true,  value: 0 },
+      { pin: 13, label: 'PWM Fan',   output: true,  value: 0 },
+      { pin: 34, label: 'Taster',    output: false, value: 0 },
+      { pin: 35, label: 'Sensor',    output: false, value: 1 },
+    ]
+  },
+  info: {
+    ip: '192.168.1.42',
+    hostname: 'wrzt-esp32',
+    rssi: -58,
+    uptime: 7210,
+    heap: 196608,
+    chip: 'ESP32-S3'
+  }
+};
+
+let DEMO_MODE = false;
+let outputPins = [];
+let inputPins  = [];
+let pwmValues  = {};
+let autoTimer  = null;
+
+const API_BASE = (window.location.origin.startsWith('http://') &&
+                  window.location.hostname !== 'localhost' &&
+                  !window.location.hostname.includes('github') &&
+                  !window.location.hostname.includes('127.0.0.1'))
+  ? window.location.origin
+  : null;
+
+function detectDemoNeeded() {
+  return !API_BASE;
+}
+
+function toggleDemo() {
+  DEMO_MODE = !DEMO_MODE;
+  applyDemoState();
+  toast(DEMO_MODE ? 'Demo-Modus aktiviert' : 'Demo-Modus deaktiviert', DEMO_MODE ? 'warn' : 'ok');
+  if (!DEMO_MODE) {
+    init();
+  } else {
+    loadConfig();
+    refreshInfo();
+    checkConnection();
+    document.getElementById('loading').classList.add('hidden');
+  }
+}
+
+function applyDemoState() {
+  const badge  = document.getElementById('conn-badge');
+  const banner = document.getElementById('demo-banner');
+  const btn    = document.getElementById('demo-toggle');
+  if (DEMO_MODE) {
+    badge.textContent  = '● Demo';
+    badge.className    = 'demo';
+    banner.classList.add('visible');
+    btn.style.background = 'rgba(245,158,11,.25)';
+  } else {
+    banner.classList.remove('visible');
+    btn.style.background = '';
+  }
+}
+
+async function api(path) {
+  if (DEMO_MODE) return demoApi(path);
+  const base = API_BASE || window.location.origin;
+  const r = await fetch(base + path);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+function demoApi(path) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      if (path.startsWith('/status'))  resolve(JSON.parse(JSON.stringify(DEMO_DATA.status)));
+      else if (path.startsWith('/info')) resolve(JSON.parse(JSON.stringify(DEMO_DATA.info)));
+      else if (path.startsWith('/set')) {
+        const m = path.match(/pin=(\d+)&state=(\d)/);
+        if (m) {
+          const pin = +m[1], state = +m[2];
+          const p = DEMO_DATA.status.pins.find(x => x.pin === pin);
+          if (p) p.value = state;
+        }
+        resolve({ ok: true });
+      }
+      else if (path.startsWith('/pwm')) {
+        const m = path.match(/pin=(\d+)&duty=(\d+)/);
+        if (m) pwmValues[+m[1]] = +m[2];
+        resolve({ ok: true });
+      }
+      else if (path.startsWith('/read')) {
+        const m = path.match(/pin=(\d+)/);
+        if (m) {
+          const p = DEMO_DATA.status.pins.find(x => x.pin === +m[1]);
+          resolve({ value: p ? p.value : 0 });
+        } else resolve({ value: 0 });
+      }
+      else resolve({ ok: true });
+    }, 60);
+  });
+}
+
+async function setColor(color) {
+  const orb   = document.getElementById('sys-led-orb');
+  const label = document.getElementById('sys-led-label');
+  const c = COLOR_MAP[color] || COLOR_MAP.off;
+  orb.style.background = c.bg;
+  orb.style.boxShadow  = color === 'off' ? 'none' : `0 0 14px 4px ${c.shadow}55`;
+  orb.style.borderColor = c.bg;
+  label.textContent = color === 'off' ? 'LED aus' : color.toUpperCase();
+  label.style.color = color === 'off' ? 'var(--muted)' : c.bg;
+  try {
+    if (DEMO_MODE) {
+      toast('Demo: LED → ' + color.toUpperCase(), 'warn');
+    } else {
+      await fetch((API_BASE || window.location.origin) + '/set?color=' + color);
+      toast('LED → ' + color.toUpperCase());
+    }
+  } catch (e) {
+    toast('Fehler: ' + e.message, 'err');
+  }
+}
+
+function toast(msg, type = 'ok') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.textContent = msg;
+  document.getElementById('toast-container').appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+function renderOutputs() {
+  const c = document.getElementById('outputs-container');
+  if (!outputPins.length) { c.innerHTML = '<p style="color:var(--muted);font-size:.85rem">Keine Output-Pins konfiguriert</p>'; return; }
+  c.innerHTML = outputPins.map(p => `
+    <div class="pin-row">
+      <div class="led" id="led-${p.pin}"></div>
+      <div class="pin-label">
+        <strong>${p.label}</strong>
+        <span>GPIO ${p.pin}</span>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="tog-${p.pin}"
+               onchange="setPin(${p.pin}, this.checked ? 1 : 0)"
+               ${p.value ? 'checked' : ''}>
+        <div class="toggle-track"></div>
+      </label>
+    </div>`).join('');
+  outputPins.forEach(p => updateLed(p.pin, p.value));
+}
+
+function renderPWM() {
+  const c = document.getElementById('pwm-container');
+  if (!outputPins.length) { c.innerHTML = '<p style="color:var(--muted);font-size:.85rem">Keine PWM-Pins konfiguriert</p>'; return; }
+  c.innerHTML = outputPins.map(p => `
+    <div class="pin-row">
+      <div class="pin-label">
+        <strong>${p.label}</strong>
+        <span>GPIO ${p.pin}</span>
+      </div>
+      <div class="pwm-wrap">
+        <input type="range" min="0" max="255" value="${pwmValues[p.pin] || 0}" id="pwm-${p.pin}"
+               oninput="document.getElementById('pv-${p.pin}').textContent=this.value"
+               onchange="setPWM(${p.pin}, this.value)">
+        <span class="pwm-val" id="pv-${p.pin}">${pwmValues[p.pin] || 0}</span>
+      </div>
+    </div>`).join('');
+}
+
+function renderInputs() {
+  const c = document.getElementById('inputs-container');
+  if (!inputPins.length) { c.innerHTML = '<p style="color:var(--muted);font-size:.85rem">Keine Input-Pins konfiguriert</p>'; return; }
+  c.innerHTML = inputPins.map(p => `
+    <div class="input-row">
+      <div class="led" id="led-in-${p.pin}"></div>
+      <div class="pin-label" style="flex:1">
+        <strong>${p.label}</strong>
+        <span>GPIO ${p.pin}</span>
+      </div>
+      <div class="input-val" id="ival-${p.pin}">—</div>
+    </div>`).join('');
+  inputPins.forEach(p => updateInput(p.pin, p.value));
+}
+
+function updateLed(pin, state) {
+  const el = document.getElementById('led-' + pin);
+  if (el) el.className = 'led ' + (state ? 'on' : 'off');
+  const tog = document.getElementById('tog-' + pin);
+  if (tog) tog.checked = !!state;
+}
+
+function updateInput(pin, val) {
+  const el = document.getElementById('ival-' + pin);
+  if (el) {
+    el.textContent = val ? 'HIGH (1)' : 'LOW  (0)';
+    el.className = 'input-val ' + (val ? 'high' : 'low');
+  }
+  const led = document.getElementById('led-in-' + pin);
+  if (led) led.className = 'led ' + (val ? 'on' : 'off');
+}
+
+async function loadConfig() {
+  const data = await api('/status');
+  outputPins = data.pins.filter(p => p.output);
+  inputPins  = data.pins.filter(p => !p.output);
+  renderOutputs();
+  renderPWM();
+  renderInputs();
+}
+
+async function setPin(pin, state) {
+  try {
+    await api(`/set?pin=${pin}&state=${state}`);
+    updateLed(pin, state);
+    toast(`GPIO ${pin} → ${state ? 'EIN' : 'AUS'}`);
+  } catch (e) {
+    toast('Fehler: ' + e.message, 'err');
+  }
+}
+
+async function setPWM(pin, duty) {
+  try {
+    await api(`/pwm?pin=${pin}&duty=${duty}`);
+    pwmValues[pin] = duty;
+    toast(`PWM GPIO ${pin} → ${duty}/255`);
+  } catch (e) {
+    toast('Fehler: ' + e.message, 'err');
+  }
+}
+
+async function refreshInputs() {
+  for (const p of inputPins) {
+    try {
+      const d = await api(`/read?pin=${p.pin}`);
+      updateInput(p.pin, d.value);
+    } catch {}
+  }
+}
+
+async function refreshInfo() {
+  try {
+    const d = await api('/info');
+    document.getElementById('info-ip').textContent     = d.ip;
+    document.getElementById('info-host').textContent   = d.hostname;
+    document.getElementById('info-rssi').textContent   = d.rssi + ' dBm';
+    document.getElementById('info-uptime').textContent = formatUptime(d.uptime);
+    document.getElementById('info-heap').textContent   = (d.heap / 1024).toFixed(1) + ' KB';
+    document.getElementById('info-chip').textContent   = d.chip;
+  } catch {}
+}
+
+function formatUptime(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+async function refreshAll() {
+  await refreshInputs();
+  await refreshInfo();
+}
+
+async function allOff() {
+  for (const p of outputPins) await setPin(p.pin, 0);
+}
+
+async function checkConnection() {
+  const badge = document.getElementById('conn-badge');
+  if (DEMO_MODE) return;
+  try {
+    await api('/info');
+    badge.textContent = '● Online';
+    badge.className = 'online';
+  } catch {
+    badge.textContent = '● Offline';
+    badge.className = 'offline';
+  }
+}
+
+document.getElementById('auto-refresh').addEventListener('change', function () {
+  if (this.checked) startAuto(); else { clearInterval(autoTimer); autoTimer = null; }
+});
+
+function startAuto() {
+  if (autoTimer) clearInterval(autoTimer);
+  autoTimer = setInterval(async () => {
+    await refreshInputs();
+    if (!DEMO_MODE) await checkConnection();
+  }, 5000);
+}
+
+const cmdInput  = document.getElementById('cmd-input');
+const consoleEl = document.getElementById('console-log');
+let cmdHistory = [];
+let histIdx    = -1;
+
+function clog(text, cls = 'log-ok') {
+  const ts   = new Date().toTimeString().slice(0, 8);
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">${ts}</span><span class="${cls}">${text}</span>`;
+  consoleEl.appendChild(line);
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+function fillCmd(val) { cmdInput.value = val; cmdInput.focus(); }
+
+cmdInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter')     { runCmd(); return; }
+  if (e.key === 'ArrowUp')   { e.preventDefault(); histIdx = Math.min(histIdx+1, cmdHistory.length-1); cmdInput.value = cmdHistory[histIdx] || ''; }
+  if (e.key === 'ArrowDown') { e.preventDefault(); histIdx = Math.max(histIdx-1, -1); cmdInput.value = histIdx < 0 ? '' : cmdHistory[histIdx]; }
+  if (e.key === 'Tab')       { e.preventDefault(); autoComplete(); }
+});
+
+function autoComplete() {
+  const v = cmdInput.value.trim().toLowerCase();
+  const cmds = ['help','status','info','set','pwm','read','alloff','clear','refresh'];
+  const match = cmds.find(c => c.startsWith(v) && c !== v);
+  if (match) cmdInput.value = match + ' ';
+}
+
+async function runCmd() {
+  const raw  = cmdInput.value.trim();
+  if (!raw) return;
+  const args = raw.split(/\s+/);
+  const cmd  = args[0].toLowerCase();
+
+  clog('> ' + raw, 'log-cmd');
+  cmdHistory.unshift(raw);
+  histIdx = -1;
+  cmdInput.value = '';
+
+  if (cmd === 'clear')   { consoleEl.innerHTML = ''; clog('Konsole geleert.', 'log-hint'); return; }
+  if (cmd === 'refresh') { await refreshAll(); clog('UI aktualisiert.', 'log-ok'); return; }
+  if (cmd === 'alloff')  { await allOff(); clog('Alle Outputs ausgeschaltet.', 'log-ok'); return; }
+
+  if (cmd === 'help') {
+    [
+      '┌─ Verfügbare Befehle ─────────────────────',
+      '│  set  &lt;pin&gt; &lt;0|1&gt;      → Digital-Output schalten',
+      '│  pwm  &lt;pin&gt; &lt;0-255&gt;    → PWM-Wert setzen',
+      '│  read &lt;pin&gt;            → Digital-Input lesen',
+      '│  status               → Alle Pins als JSON',
+      '│  info                 → System-Informationen',
+      '│  alloff               → Alle Outputs ausschalten',
+      '│  refresh              → UI aktualisieren',
+      '│  clear                → Konsole leeren',
+      '│  ↑↓  Verlauf  │  Tab  Autovervollständigung',
+      '└──────────────────────────────────────────',
+    ].forEach(l => clog(l, 'log-info'));
+    return;
+  }
+
+  try {
+    let path = '';
+    if      (cmd === 'set')    { if (args.length < 3) { clog('Syntax: set <pin> <0|1>', 'log-err'); return; } path = `/set?pin=${args[1]}&state=${args[2]}`; }
+    else if (cmd === 'pwm')    { if (args.length < 3) { clog('Syntax: pwm <pin> <0-255>', 'log-err'); return; } path = `/pwm?pin=${args[1]}&duty=${args[2]}`; }
+    else if (cmd === 'read')   { if (args.length < 2) { clog('Syntax: read <pin>', 'log-err'); return; } path = `/read?pin=${args[1]}`; }
+    else if (cmd === 'status') { path = '/status'; }
+    else if (cmd === 'info')   { path = '/info'; }
+    else { clog(`Unbekannter Befehl: "${cmd}" — tippe help`, 'log-err'); return; }
+
+    const data = await api(path);
+    const out  = JSON.stringify(data, null, 2);
+    out.split('\n').forEach(l => clog(l, 'log-ok'));
+
+    if (cmd === 'set')  updateLed(+args[1], +args[2]);
+    if (cmd === 'read') { try { updateInput(+args[1], data.value); } catch {} }
+
+  } catch (e) {
+    clog('Verbindungsfehler: ' + e.message, 'log-err');
+  }
+}
+
+async function init() {
+  const loadMsg = document.getElementById('loading-msg');
+  try {
+    await loadConfig();
+    await refreshInfo();
+    await checkConnection();
+    document.getElementById('loading').classList.add('hidden');
+    startAuto();
+  } catch (e) {
+    if (!DEMO_MODE) {
+      loadMsg.textContent = '';
+      document.getElementById('loading').innerHTML = `
+        <div style="text-align:center;color:#ef4444;padding:24px;max-width:320px">
+          <div style="font-size:2rem;margin-bottom:12px">⚠️</div>
+          <strong>ESP32 nicht erreichbar</strong><br>
+          <span style="color:#64748b;font-size:.85rem;display:block;margin:10px 0">${e}</span>
+          <button onclick="activateDemoFromError()" style="margin-top:14px;padding:10px 22px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:9px;color:#f59e0b;font-family:monospace;font-size:.85rem;cursor:pointer">
+            Demo-Modus starten
+          </button>
+        </div>`;
+    }
+  }
+}
+
+function activateDemoFromError() {
+  DEMO_MODE = true;
+  applyDemoState();
+  document.getElementById('loading').classList.add('hidden');
+  loadConfig();
+  refreshInfo();
+  toast('Demo-Modus aktiviert', 'warn');
+  startAuto();
+}
+
+(async () => {
+  if (detectDemoNeeded()) {
+    DEMO_MODE = true;
+    applyDemoState();
+    await loadConfig();
+    await refreshInfo();
+    document.getElementById('loading').classList.add('hidden');
+    startAuto();
+  } else {
+    await init();
+  }
+})();
+</script>
+</body>
+</html>
