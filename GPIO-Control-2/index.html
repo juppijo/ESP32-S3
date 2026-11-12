@@ -620,12 +620,12 @@ let inputPins  = [];
 let pwmValues  = {};
 let autoTimer  = null;
 
-const API_BASE = (window.location.origin.startsWith('http://') &&
-                  window.location.hostname !== 'localhost' &&
-                  !window.location.hostname.includes('github') &&
-                  !window.location.hostname.includes('127.0.0.1'))
+const API_BASE = window.location.origin.startsWith('http://') ||
+                 window.location.hostname !== 'localhost' &&
+                 !window.location.hostname.includes('github')
   ? window.location.origin
-  : null;
+  : 'http://esp32gpio.local';
+
 
 function detectDemoNeeded() {
   return !API_BASE;
