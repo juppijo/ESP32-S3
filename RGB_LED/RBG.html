@@ -56,9 +56,10 @@
 
 		<h2>Verbindung</h2>
 		<div class='row ip-row'>
-			<label>ESP32-IP</label>
-			<input type='text' id='ip' placeholder='z. B. 192.168.129.48' autocomplete='off' autocapitalize='off' spellcheck='false'>
+			<label>ESP32</label>
+			<input type='text' id='ip' placeholder='http://192.168.129.48' autocomplete='off' autocapitalize='off' spellcheck='false'>
 			<button class='btn fx' onclick="saveIp()">Speichern</button>
+			<button class='btn fx' onclick="testConn()">Testen</button>
 		</div>
 		<p id='hint'></p>
 
@@ -112,12 +113,18 @@
 		let savedIp = '';
 		try { savedIp = localStorage.getItem('esp32ip') || ''; } catch {}
 
-		function cleanIp(v) {
-			return v.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+		// Aus "83.134.55.39:318", "http://83.134.55.39:318/" usw. wird "http://83.134.55.39:318"
+		function normalizeBase(v) {
+			v = v.trim();
+			if (!v) return '';
+			const m = v.match(/^(https?):\/\//i);
+			const scheme = m ? m[1].toLowerCase() : 'http';
+			const host = v.replace(/^https?:\/\//i, '').replace(/[\/?#].*$/, '');
+			return host ? scheme + '://' + host : '';
 		}
 
 		function getBase() {
-			if (savedIp) return 'http://' + savedIp;
+			if (savedIp) return normalizeBase(savedIp);
 			const served = (location.protocol === 'http:' || location.protocol === 'https:')
 				&& location.hostname !== 'localhost' && !location.hostname.includes('github');
 			return served ? location.origin : 'http://esp32gpio.local';
@@ -140,22 +147,38 @@
 			if (location.protocol === 'https:' && getBase().startsWith('http:'))
 				return 'Seite per https geöffnet – der ESP32 (http) wird vom Browser blockiert. Seite per http oder lokal öffnen.';
 			if (e && /^HTTP/.test(e.message)) return 'ESP32 meldet ' + e.message;
-			return 'ESP32 unter ' + getBase().replace('http://', '') + ' nicht erreichbar – gleiches WLAN? IP richtig?';
+			return 'ESP32 unter ' + getBase() + ' nicht erreichbar – gleiches WLAN? IP richtig?';
 		}
 
 		function updateHint() {
-			$('hint').textContent = 'Verwendet: ' + getBase().replace('http://', '') +
-				(savedIp ? '' : '  (keine IP gespeichert)');
+			const h = $('hint');
+			h.textContent = 'Verwendet: ' + getBase() + (savedIp ? '' : '  (keine Adresse gespeichert)');
+			if (location.protocol === 'https:' && getBase().startsWith('http:')) {
+				h.appendChild(document.createElement('br'));
+				const a = document.createElement('a');
+				a.href = location.href.replace(/^https:/, 'http:');
+				a.textContent = '⚠ Seite ist per https geöffnet – hier per http öffnen';
+				a.style.color = '#ffd27a';
+				h.appendChild(a);
+			}
 		}
 
 		function saveIp() {
-			savedIp = cleanIp($('ip').value);
+			savedIp = normalizeBase($('ip').value);
+			$('ip').value = savedIp ? normalizeBase(savedIp) : '';
 			try { savedIp ? localStorage.setItem('esp32ip', savedIp) : localStorage.removeItem('esp32ip'); } catch {}
 			updateHint();
-			showStatus(savedIp ? 'IP gespeichert: ' + savedIp : 'IP gelöscht');
+			showStatus(savedIp ? 'Adresse gespeichert: ' + savedIp : 'Adresse gelöscht');
 			ping();
 		}
 
+		async function testConn() {
+			showStatus('Teste ' + getBase() + ' …');
+			try { await call('/info', 4000); setOnline(true); showStatus('ESP32 antwortet unter ' + getBase()); }
+			catch (e) { setOnline(false); showStatus(friendlyError(e), false); }
+		}
+
+		// ---------- Hilfsfunktionen ----------
 		const $ = id => document.getElementById(id);
 		const statusEl = $('status'), cardEl = $('card'), previewEl = $('preview'), connEl = $('conn');
 
