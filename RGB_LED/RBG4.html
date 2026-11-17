@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang='de'>
+<head>
+	<meta charset='UTF-8'>
+	<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+	<title>WRZT · Lichtsteuerung</title>
+	<style>
+		body{background:#1a1a4a; color:#e0e0e0; text-align:center; font-family:sans-serif; padding:20px 10px; margin:0; min-height:100vh; box-sizing:border-box;}
+		.card{margin-top: 20px; background:#2a2a6a; padding: 20px; border-radius:15px; display:inline-block; border: 1px solid #444; transition: box-shadow .12s; max-width:560px; width:100%; box-sizing:border-box;}
+		.btn{padding:10px 16px; font-size:.95rem; margin:5px; border:none; border-radius:8px; cursor:pointer; font-weight:bold; transition: 0.3s;}
+
+		.red{background:#cc3333; color:white;} .red:hover{background:#ff4444;}
+		.green{background:#33cc33; color:white;} .green:hover{background:#44ff44;}
+		.blue{background:#3333cc; color:white;} .blue:hover{background:#4444ff;}
+
+		.yellow{background:#cccc33; color:white;} .yellow:hover{background:#ffff44; color:#222;}
+		.magenta{background:#cc33cc; color:white;} .magenta:hover{background:#ff44ff;}
+		.aqua{background:#33cccc; color:white;} .aqua:hover{background:#44ffff; color:#222;}
+
+		.orange{background:#cc7733; color:white;} .orange:hover{background:#ffaa44;}
+		.violet{background:#7c3aed; color:white;} .violet:hover{background:#9f67ff;}
+		.pink{background:#ec4899; color:white;} .pink:hover{background:#f472b6;}
+		.lime{background:#65a30d; color:white;} .lime:hover{background:#84cc16;}
+		.teal{background:#0d9488; color:white;} .teal:hover{background:#14b8a6;}
+		.warmwhite{background:#f5d0a9; color:#222;} .warmwhite:hover{background:#ffe4c4;}
+
+		.white{background:#bbbbbb; color:#222;} .white:hover{background:#dddddd;}
+		.off{background:#555; color:white;}
+
+		.fx{background:#3b3b8f; color:white; border:1px solid #6666cc;}
+		.fx:hover{background:#5555bb;}
+		.fx.active{box-shadow:0 0 14px 3px #8fa0ff; outline:2px solid #c3ccff;}
+		.fx.candle{background:linear-gradient(135deg,#d9a520,#cc5500); border-color:#ffb347;}
+		.fx.candle.active{box-shadow:0 0 14px 3px #ff9a2e; outline-color:#ffd27a;}
+
+		h2{font-size:.8rem; letter-spacing:.15em; text-transform:uppercase; color:#9fa8ff; margin:22px 0 6px; border-top:1px solid #444; padding-top:14px;}
+		.row{display:flex; align-items:center; justify-content:center; gap:12px; margin:8px 0; flex-wrap:wrap;}
+		.row label{min-width:70px; text-align:right; font-size:.9rem;}
+		.row .val{min-width:30px; text-align:left; font-family:monospace; color:#9fa8ff;}
+		input[type=range]{flex:1; min-width:140px; max-width:260px; accent-color:#8fa0ff;}
+		select{padding:8px 10px; border-radius:8px; background:#1a1a4a; color:#e0e0e0; border:1px solid #6666cc; font-size:.95rem;}
+
+		/* Farb-Picker Bereich */
+		.picker-box{background:#212156; border:1px solid #4c4c99; border-radius:12px; padding:12px; margin:12px 0 4px;}
+		.picker-row{display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap;}
+		input[type=color]{
+			width:58px; height:44px; padding:2px; border:2px solid #8fa0ff;
+			border-radius:10px; background:#1a1a4a; cursor:pointer;
+		}
+		.hex-badge{
+			font-family:monospace; font-size:.95rem; background:#1a1a4a;
+			padding:8px 12px; border-radius:8px; border:1px solid #5555aa; color:#fff;
+		}
+		.rgb-info{font-family:monospace; font-size:.8rem; color:#9fa8ff; margin-top:6px;}
+
+		#conn{display:inline-block; padding:4px 12px; border-radius:20px; font-family:monospace; font-size:.8rem; background:rgba(100,116,139,.25); color:#aab; border:1px solid #556;}
+		#conn.online{background:rgba(34,197,94,.15); color:#33cc33; border-color:rgba(34,197,94,.5);}
+		#conn.offline{background:rgba(239,68,68,.15); color:#ff6666; border-color:rgba(239,68,68,.5);}
+
+		.ip-row input[type=text]{padding:9px 10px; border-radius:8px; background:#1a1a4a; color:#e0e0e0; border:1px solid #6666cc; font-size:.95rem; width:170px; font-family:monospace;}
+		input[type=time]{padding:8px 10px; border-radius:8px; background:#1a1a4a; color:#e0e0e0; border:1px solid #6666cc; font-size:1.05rem; color-scheme:dark;}
+		.note{font-size:.78rem; color:#aab; margin:6px 0 0; line-height:1.4;}
+		.btn.alloff{background:#8a1f1f; color:#fff; border:1px solid #ff6666; font-size:1.05rem; padding:12px 26px;}
+		.btn.alloff:hover{background:#c02a2a;}
+		#hint{font-size:.78rem; color:#aab; margin:4px 0 0; line-height:1.4;}
+		#preview{width:34px; height:34px; border-radius:50%; background:#222; border:2px solid #555; display:inline-block; vertical-align:middle; transition:background .08s, box-shadow .08s;}
+
+		#status{margin-top:12px; min-height:1.4em; font-family:monospace; font-size:.9rem;}
+		#status.ok{color:#33cc33;}
+		#status.err{color:#ff6666;}
+		#sleep-left{font-family:monospace; color:#ffd27a; min-width:70px; text-align:left;}
+	</style>
+</head>
+<body>
+	<div class='card' id='card'>
+		<h1>WRZT - Lichtsteuerung.</h1>
+		<div><span id='conn'>● Prüfe …</span> <span id='preview'></span></div>
+		<div><button class='btn alloff' onclick="allOff()">⏻ ALLES AUS</button></div>
+
+		<h2>Verbindung</h2>
+		<div class='row ip-row'>
+			<label>ESP32</label>
+			<input type='text' id='ip' placeholder='http://192.168.129.48' autocomplete='off' autocapitalize='off' spellcheck='false'>
+			<button class='btn fx' onclick="saveIp()">Speichern</button>
+			<button class='btn fx' onclick="testConn()">Testen</button>
+		</div>
+		<p id='hint'></p>
+
+		<h2>Farben</h2>
+		<button class='btn red' onclick="setColor('red')">ROT</button>
+		<button class='btn green' onclick="setColor('green')">GRÜN</button>
+		<button class='btn blue' onclick="setColor('blue')">BLAU</button>
+		<br>
+		<button class='btn yellow' onclick="setColor('yellow')">GELB</button>
+		<button class='btn magenta' onclick="setColor('magenta')">MAGENTA</button>
+		<button class='btn aqua' onclick="setColor('aqua')">AQUA</button>
+		<br>
+		<button class='btn orange' onclick="setColor('orange')">ORANGE</button>
+		<button class='btn violet' onclick="setCustomHex('#7c3aed', 'VIOLETT')">VIOLETT</button>
+		<button class='btn pink' onclick="setCustomHex('#ec4899', 'ROSA')">ROSA</button>
+		<br>
+		<button class='btn lime' onclick="setCustomHex('#65a30d', 'LIMETTE')">LIMETTE</button>
+		<button class='btn teal' onclick="setCustomHex('#0d9488', 'TÜRKIS')">TÜRKIS</button>
+		<button class='btn warmwhite' onclick="setCustomHex('#ffd2a1', 'WARMWEISS')">WARMWEISS</button>
+		<br>
+		<button class='btn white' onclick="setColor('white')">WEISS</button>
+		<button class='btn off' onclick="setColor('off')">LED AUS</button>
+
+		<div class='picker-box'>
+			<div class='picker-row'>
+				<label for='color-picker' style='font-size:.9rem; font-weight:bold;'>🎨 Farb-Picker</label>
+				<input type='color' id='color-picker' value='#ff6600'>
+				<span class='hex-badge' id='hex-label'>#FF6600</span>
+				<button class='btn fx' onclick="applyPickerColor()">Senden</button>
+			</div>
+			<div class='rgb-info' id='rgb-info'>R: 255 · G: 102 · B: 0</div>
+			<div class='row' style='margin-top:6px;'>
+				<label style='min-width:auto; font-size:.82rem; color:#aab;'>
+					<input type='checkbox' id='picker-live' checked> Live beim Auswählen senden
+				</label>
+				<label style='min-width:auto; font-size:.82rem; color:#aab;'>
+					<input type='checkbox' id='picker-compat'> Nur 8 Grundfarben (Fallback)
+				</label>
+			</div>
+		</div>
+
+		<h2>Effekte</h2>
+		<button class='btn fx candle' data-fx='candle' onclick="toggleEffect('candle')">🕯 KERZE</button>
+		<button class='btn fx' data-fx='rainbow' onclick="toggleEffect('rainbow')">🌈 REGENBOGEN</button>
+		<button class='btn fx' data-fx='party' onclick="toggleEffect('party')">🎉 PARTY</button>
+		<button class='btn fx' data-fx='police' onclick="toggleEffect('police')">🚨 POLIZEI</button>
+		<button class='btn fx' data-fx='sunset' onclick="toggleEffect('sunset')">🌅 SONNENUNTERGANG</button>
+		<button class='btn fx' data-fx='music' onclick="toggleEffect('music')">🎵 MUSIK</button>
+		<div class='row'>
+			<label>Tempo</label>
+			<input type='range' id='speed' min='1' max='10' value='5'>
+			<span class='val' id='speed-val'>5</span>
+		</div>
+
+		<div class='row'>
+			<label>Kerze</label>
+			<select id='candle-level'>
+				<option value='calm'>ruhig</option>
+				<option value='normal' selected>normal</option>
+				<option value='windy'>windig</option>
+			</select>
+		</div>
+		<p class='note'>🎵 Musik: Die Farbe wechselt im Takt der Bässe (Mikrofon). Das Tempo begrenzt, wie schnell.</p>
+
+		<h2>Morsecode</h2>
+		<div class='row ip-row'>
+			<input type='text' id='morse-text' placeholder='Text, z. B. SOS' maxlength='60' style='width:200px'>
+			<select id='morse-color'>
+				<option value='white'>weiß</option>
+				<option value='orange'>orange</option>
+				<option value='red'>rot</option>
+				<option value='green'>grün</option>
+				<option value='blue'>blau</option>
+				<option value='yellow'>gelb</option>
+				<option value='aqua'>aqua</option>
+				<option value='magenta'>magenta</option>
+			</select>
+		</div>
+		<button class='btn fx' data-fx='morse' onclick="toggleEffect('morse')">📡 SENDEN</button>
+
+		<h2>Wecker</h2>
+		<div class='row'>
+			<label>Weckzeit</label>
+			<input type='time' id='alarm-time' value='07:00'>
+		</div>
+		<div class='row'>
+			<label>Sonnenaufgang</label>
+			<select id='alarm-dur'>
+				<option value='1'>1 Min. vorher</option>
+				<option value='5'>5 Min. vorher</option>
+				<option value='10' selected>10 Min. vorher</option>
+				<option value='15'>15 Min. vorher</option>
+				<option value='30'>30 Min. vorher</option>
+			</select>
+		</div>
+		<button class='btn fx' id='alarm-btn' onclick="toggleAlarm()">⏰ WECKER STELLEN</button>
+		<p class='note' id='alarm-info'></p>
+		<p class='note'>Der Wecker läuft nur, solange diese Seite geöffnet ist und das Handy nicht schläft.</p>
+
+		<h2>Einschlaf-Timer</h2>
+		<div class='row'>
+			<select id='sleep-sel'>
+				<option value='0'>Aus</option>
+				<option value='15'>15 Minuten</option>
+				<option value='30'>30 Minuten</option>
+				<option value='60'>60 Minuten</option>
+				<option value='120'>120 Minuten</option>
+			</select>
+			<span id='sleep-left'></span>
+		</div>
+
+		<h2>Anzeige</h2>
+		<button class='btn fx' id='full-btn' onclick="toggleFullscreen()">⛶ VOLLBILD</button>
+		<p class='note'><label><input type='checkbox' id='wake'> Bildschirm wach halten</label></p>
+
+		<div id='status'></div>
+		<p><small>Zaminia System Status: Online</small></p>
+	</div>
+
+	<script>
+		// ---------- Basis ----------
+		let savedIp = '';
+		try { savedIp = localStorage.getItem('esp32ip') || ''; } catch {}
+
+		function normalizeBase(v) {
+			v = v.trim();
+			if (!v) return '';
+			const m = v.match(/^(https?):\/\//i);
+			const scheme = m ? m[1].toLowerCase() : 'http';
+			const host = v.replace(/^https?:\/\//i, '').replace(/[\/?#].*$/, '');
+			return host ? scheme + '://' + host : '';
+		}
+
+		function getBase() {
+			if (savedIp) return normalizeBase(savedIp);
+			const served = (location.protocol === 'http:' || location.protocol === 'https:')
+				&& location.hostname !== 'localhost' && !location.hostname.includes('github');
+			return served ? location.origin : 'http://esp32gpio.local';
+		}
+
+		async function call(path, timeoutMs) {
+			const base = getBase();
+			const same = base === location.origin;
+			const ctrl = new AbortController();
+			const t = timeoutMs ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+			try {
+				const r = await fetch(base + path, { mode: same ? 'cors' : 'no-cors', signal: ctrl.signal });
+				if (same && !r.ok) throw new Error('HTTP ' + r.status);
+			} finally { if (t) clearTimeout(t); }
+		}
+
+		function friendlyError(e) {
+			if (location.protocol === 'https:' && getBase().startsWith('http:'))
+				return 'Seite per https geöffnet – der ESP32 (http) wird vom Browser blockiert. Seite per http oder lokal öffnen.';
+			if (e && /^HTTP/.test(e.message)) return 'ESP32 meldet ' + e.message;
+			return 'ESP32 unter ' + getBase() + ' nicht erreichbar – gleiches WLAN? IP richtig?';
+		}
+
+		function updateHint() {
+			const h = $('hint');
+			h.textContent = 'Verwendet: ' + getBase() + (savedIp ? '' : '  (keine Adresse gespeichert)');
+			if (location.protocol === 'https:' && getBase().startsWith('http:')) {
+				h.appendChild(document.createElement('br'));
+				const a = document.createElement('a');
+				a.href = location.href.replace(/^https:/, 'http:');
+				a.textContent = '⚠ Seite ist per https geöffnet – hier per http öffnen';
+				a.style.color = '#ffd27a';
+				h.appendChild(a);
+			}
+		}
+
+		function saveIp() {
+			savedIp = normalizeBase($('ip').value);
+			$('ip').value = savedIp ? normalizeBase(savedIp) : '';
+			try { savedIp ? localStorage.setItem('esp32ip', savedIp) : localStorage.removeItem('esp32ip'); } catch {}
+			updateHint();
+			showStatus(savedIp ? 'Adresse gespeichert: ' + savedIp : 'Adresse gelöscht');
+			ping();
+		}
+
+		async function testConn() {
+			showStatus('Teste ' + getBase() + ' …');
+			try { await call('/info', 4000); setOnline(true); showStatus('ESP32 antwortet unter ' + getBase()); }
+			catch (e) { setOnline(false); showStatus(friendlyError(e), false); }
+		}
+
+		// ---------- Hilfsfunktionen ----------
+		const $ = id => document.getElementById(id);
+		const statusEl = $('status'), cardEl = $('card'), previewEl = $('preview'), connEl = $('conn');
+
+		const SHOW = {
+			red:'#dc2626', green:'#16a34a', blue:'#2563eb', yellow:'#e0b020',
+			magenta:'#a21caf', aqua:'#0891b2', orange:'#ea580c', white:'#e2e8f0', off:'transparent'
+		};
+
+		const NAMED_RGB = {
+			red:     [255, 0, 0],
+			green:   [0, 255, 0],
+			blue:    [0, 0, 255],
+			yellow:  [255, 255, 0],
+			magenta: [255, 0, 255],
+			aqua:    [0, 255, 255],
+			orange:  [255, 110, 0],
+			white:   [255, 255, 255]
+		};
+
+		function hexToRgb(hex) {
+			const clean = hex.replace('#', '');
+			const num = parseInt(clean, 16);
+			return {
+				r: (num >> 16) & 255,
+				g: (num >> 8) & 255,
+				b: num & 255
+			};
+		}
+
+		function rgbToHex(r, g, b) {
+			const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
+			return '#' + [clamp(r), clamp(g), clamp(b)]
+				.map(v => v.toString(16).padStart(2, '0'))
+				.join('').toUpperCase();
+		}
+
+		function nearestNamedColor(r, g, b) {
+			if (r < 25 && g < 25 && b < 25) return 'off';
+			let best = 'white', bestDist = Infinity;
+			for (const [name, [nr, ng, nb]] of Object.entries(NAMED_RGB)) {
+				const d = (r - nr) ** 2 + (g - ng) ** 2 + (b - nb) ** 2;
+				if (d < bestDist) { bestDist = d; best = name; }
+			}
+			return best;
+		}
+
+		let speed = 5;
+		const rand = (a,b) => a + Math.random()*(b-a);
+		const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+		const sleep = ms => new Promise(r => setTimeout(r, ms));
+		const spd = () => speed / 5;
+
+		function showStatus(text, ok = true) {
+			statusEl.className = ok ? 'ok' : 'err';
+			statusEl.textContent = text;
+		}
+
+		// ---------- Verbindung ----------
+		function setOnline(on) {
+			connEl.textContent = on ? '● Online' : '● Offline';
+			connEl.className = on ? 'online' : 'offline';
+		}
+
+		async function ping() {
+			try { await call('/info', 3000); setOnline(true); }
+			catch { setOnline(false); }
+		}
+		$('ip').value = savedIp;
+		updateHint();
+		ping();
+		setInterval(ping, 5000);
+
+		// ---------- Senden ----------
+		let sending = false, pendingPath = null;
+
+		async function pump() {
+			if (sending) return;
+			sending = true;
+			while (pendingPath) {
+				const path = pendingPath; pendingPath = null;
+				try {
+					await call(path, 4000);
+					setOnline(true);
+				} catch (e) {
+					setOnline(false);
+					showStatus(friendlyError(e), false);
+				}
+			}
+			sending = false;
+		}
+
+		function applyVisualPreview(cssColor, isOff = false) {
+			previewEl.style.background = isOff ? '#222' : cssColor;
+			previewEl.style.boxShadow = isOff ? 'none' : `0 0 14px 4px ${cssColor}`;
+			cardEl.style.boxShadow = isOff ? 'none' : `0 0 40px 8px ${cssColor}`;
+		}
+
+		// Benannte Grundfarbe senden (/rgb?color=...)
+		function frame(color) {
+			const c = SHOW[color] || 'transparent';
+			applyVisualPreview(c, color === 'off');
+			pendingPath = '/rgb?color=' + encodeURIComponent(color);
+			pump();
+		}
+
+		// Frei gewählte Hex-/RGB-Farbe senden
+		function frameCustomHex(hex) {
+			const { r, g, b } = hexToRgb(hex);
+			applyVisualPreview(hex, r === 0 && g === 0 && b === 0);
+
+			if ($('picker-compat').checked) {
+				const nearest = nearestNamedColor(r, g, b);
+				pendingPath = '/rgb?color=' + encodeURIComponent(nearest);
+				pump();
+				return nearest;
+			} else {
+				const cleanHex = hex.replace('#', '').toUpperCase();
+				pendingPath = `/rgb?r=${r}&g=${g}&b=${b}&hex=${cleanHex}`;
+				pump();
+				return null;
+			}
+		}
+
+		// Direktes True-Color RGB-Frame für dynamische Effekte (z.B. Kerze)
+		function frameTrueRgb(r, g, b) {
+			r = Math.max(0, Math.min(255, Math.round(r)));
+			g = Math.max(0, Math.min(255, Math.round(g)));
+			b = Math.max(0, Math.min(255, Math.round(b)));
+			const hex = rgbToHex(r, g, b);
+			applyVisualPreview(hex, r === 0 && g === 0 && b === 0);
+
+			if ($('picker-compat').checked) {
+				const nearest = nearestNamedColor(r, g, b);
+				pendingPath = '/rgb?color=' + encodeURIComponent(nearest);
+				pump();
+			} else {
+				const cleanHex = hex.slice(1);
+				pendingPath = `/rgb?r=${r}&g=${g}&b=${b}&hex=${cleanHex}`;
+				pump();
+			}
+		}
+
+		// ---------- Farb-Picker Logik ----------
+		const pickerEl = $('color-picker');
+		const hexLabelEl = $('hex-label');
+		const rgbInfoEl = $('rgb-info');
+
+		function updatePickerDisplay(hex) {
+			const upper = hex.toUpperCase();
+			const { r, g, b } = hexToRgb(upper);
+			hexLabelEl.textContent = upper;
+			rgbInfoEl.textContent = `R: ${r} · G: ${g} · B: ${b}`;
+		}
+
+		function applyPickerColor() {
+			stopEffect();
+			const hex = pickerEl.value;
+			updatePickerDisplay(hex);
+			const fallbackName = frameCustomHex(hex);
+			if (fallbackName) {
+				showStatus(`LED (Fallback) → ${fallbackName.toUpperCase()} (${hex.toUpperCase()})`);
+			} else {
+				const { r, g, b } = hexToRgb(hex);
+				showStatus(`LED → ${hex.toUpperCase()} (R:${r} G:${g} B:${b})`);
+			}
+		}
+
+		function setCustomHex(hex, label) {
+			stopEffect();
+			pickerEl.value = hex;
+			updatePickerDisplay(hex);
+			const fallbackName = frameCustomHex(hex);
+			if (fallbackName) {
+				showStatus(`LED → ${label} (als ${fallbackName.toUpperCase()})`);
+			} else {
+				showStatus(`LED → ${label} (${hex.toUpperCase()})`);
+			}
+		}
+
+		pickerEl.addEventListener('input', () => {
+			updatePickerDisplay(pickerEl.value);
+			if ($('picker-live').checked) {
+				applyPickerColor();
+			}
+		});
+
+		pickerEl.addEventListener('change', () => {
+			applyPickerColor();
+		});
+
+		// ---------- Effekte ----------
+		let token = 0;
+		let currentFx = null;
+
+		function stopEffect() {
+			token++;
+			if (typeof alarm !== 'undefined' && alarm && alarm.fired) disarmAlarm();
+			currentFx = null;
+			document.querySelectorAll('.fx[data-fx]').forEach(b => b.classList.remove('active'));
+		}
+
+		function setColor(name) {
+			stopEffect();
+			if (SHOW[name] && name !== 'off') {
+				pickerEl.value = SHOW[name];
+				updatePickerDisplay(SHOW[name]);
+			}
+			frame(name);
+			showStatus('LED → ' + (name === 'off' ? 'AUS' : name.toUpperCase()));
+		}
+
+		$('speed').addEventListener('input', e => {
+			speed = +e.target.value;
+			$('speed-val').textContent = speed;
+		});
+
+		// Realistische Kerzen-Parameter:
+		// brightMin/brightMax = Helligkeitsbereich, warmBias = Farbtemperatur (0 = Glutrot, 1 = helles Gelb),
+		// gustChance = Wahrscheinlichkeit für Zugluft/Flackern, stepMs = Aktualisierungsintervall
+		const CANDLE = {
+			calm:   { brightMin: 0.58, brightMax: 0.96, warmBias: 0.52, gustChance: 0.04, stepMs: 110, smooth: 0.22 },
+			normal: { brightMin: 0.36, brightMax: 1.00, warmBias: 0.48, gustChance: 0.12, stepMs: 85,  smooth: 0.34 },
+			windy:  { brightMin: 0.14, brightMax: 1.00, warmBias: 0.42, gustChance: 0.28, stepMs: 65,  smooth: 0.52 }
+		};
+
+		// Berechnet aus Flammen-Intensität (0..1) und Farbtemperatur (0 = tiefrot, 1 = hellgelb)
+		// einen natürlichen Kerzen-RGB-Wert (von dunkelroter Glut bis strahlendem Kerzengelb)
+		function candleFlameRgb(brightness, warmth) {
+			// Wärme-Verlauf:
+			// warmth 0.0 -> tiefes Glutrot      (255, 24,  0)
+			// warmth 0.4 -> sattes Kerzenorange (255, 92,  2)
+			// warmth 0.7 -> warmes Goldorange   (255, 148, 8)
+			// warmth 1.0 -> helles Flammengelb  (255, 205, 26)
+			const w = Math.max(0, Math.min(1, warmth));
+			const rBase = 255;
+			const gBase = 24 + Math.pow(w, 1.15) * 181;
+			const bBase = Math.pow(w, 2.4) * 26;
+
+			// Nicht-lineare Helligkeitskurve für realistisches Abdunkeln & Aufleuchten
+			const b = Math.max(0.08, Math.min(1, brightness));
+			const lum = Math.pow(b, 1.15);
+
+			return {
+				r: rBase * lum,
+				g: gBase * lum,
+				b: bBase * lum
+			};
+		}
+
+		const MORSE = {
+			A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:''.replace('','')+'.-..',M:'--',
+			N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..',
+			0:'-----',1:'.----',2:'..---',3:'...--',4:'....-',5:'.....',6:'-....',7:'--...',8:'---..',9:'----.'
+		};
+
+		const EFFECTS = {
+			async candle(on) {
+				let curBright = 0.72;
+				let targetBright = 0.75;
+				let curWarmth = 0.50;
+				let targetWarmth = 0.50;
+				let phase = Math.random() * Math.PI * 2;
+				let gustTicks = 0;
+
+				while (on()) {
+					const L = CANDLE[$('candle-level').value] || CANDLE.normal;
+					const s = spd();
+
+					// Organische Grundschwingung (langsames Atmen der Flamme)
+					phase += 0.25 * s;
+					const breathe = Math.sin(phase) * 0.12 + Math.sin(phase * 2.37) * 0.06;
+
+					// Gelegentliche Windböe / Flacker-Sequenz
+					if (gustTicks <= 0 && Math.random() < L.gustChance) {
+						gustTicks = Math.floor(rand(2, 6));
+					}
+
+					if (gustTicks > 0) {
+						gustTicks--;
+						// Bei Zugluft: erst kurzes Einbrechen ins Dunkelrote, dann helles Gelb-Aufzüngeln
+						if (gustTicks % 2 === 1) {
+							targetBright = rand(L.brightMin, L.brightMin + 0.22);
+							targetWarmth = rand(0.05, 0.30); // tiefes Rot-Orange beim Einknicken
+						} else {
+							targetBright = rand(0.80, L.brightMax);
+							targetWarmth = rand(0.72, 1.00); // helles Gelb beim Hochflackern
+						}
+					} else if (Math.random() < 0.35) {
+						// Normales lebendiges Züngeln zwischen Rot-Orange, Gold und Gelb
+						const baseB = rand(L.brightMin + 0.12, L.brightMax) + breathe;
+						targetBright = Math.max(L.brightMin, Math.min(L.brightMax, baseB));
+						// Hellere Flamme ist meist gelber, dunklere Flamme rötlicher – mit natürlicher Variation
+						const coupledWarmth = L.warmBias + (targetBright - 0.65) * 0.85 + rand(-0.22, 0.22);
+						targetWarmth = Math.max(0, Math.min(1, coupledWarmth));
+					}
+
+					// Sanftes Nachführen (verhindert unnatürliches Stroboskop-Blitzen)
+					const alpha = Math.min(0.85, L.smooth * Math.sqrt(s));
+					curBright += (targetBright - curBright) * alpha;
+					curWarmth += (targetWarmth - curWarmth) * alpha;
+
+					const { r, g, b } = candleFlameRgb(curBright, curWarmth);
+					frameTrueRgb(r, g, b);
+
+					const jitter = rand(0.75, 1.35);
+					await sleep(Math.max(35, (L.stepMs * jitter) / s));
+				}
+			},
+			async rainbow(on) {
+				const seq = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'magenta'];
+				let i = 0;
+				while (on()) {
+					frame(seq[i]);
+					i = (i + 1) % seq.length;
+					await sleep(700 / spd());
+				}
+			},
+			async party(on) {
+				const cols = ['red', 'green', 'blue', 'yellow', 'magenta', 'aqua', 'orange', 'white'];
+				let last = '';
+				while (on()) {
+					let c; do { c = pick(cols); } while (c === last);
+					last = c;
+					frame(c);
+					await sleep(rand(250, 550) / spd());
+				}
+			},
+			async police(on) {
+				while (on()) {
+					for (const c of ['red','off','red','off','blue','off','blue','off']) {
+						if (!on()) return;
+						frame(c);
+						await sleep((c === 'off' ? 90 : 200) / spd());
+					}
+				}
+			},
+			async sunset(on) {
+				for (const c of ['yellow', 'orange', 'red', 'off']) {
+					if (!on()) return;
+					frame(c);
+					if (c === 'off') break;
+					const end = Date.now() + 30000 / spd();
+					while (on() && Date.now() < end) await sleep(250);
+				}
+				if (on()) { stopEffect(); showStatus('Sonnenuntergang beendet'); }
+			},
+			async morse(on) {
+				const text = $('morse-text').value.toUpperCase()
+					.replace(/Ä/g, 'AE').replace(/Ö/g, 'OE').replace(/Ü/g, 'UE').replace(/ß/g, 'SS');
+				const color = $('morse-color').value;
+				const words = text.split(/\s+/).map(w => [...w].filter(ch => MORSE[ch])).filter(w => w.length);
+				if (!words.length) { showStatus('Bitte Text mit Buchstaben oder Ziffern eingeben', false); stopEffect(); return; }
+				const unit = () => 300 / spd();
+				for (let w = 0; w < words.length; w++) {
+					for (let l = 0; l < words[w].length; l++) {
+						for (const sym of MORSE[words[w][l]]) {
+							if (!on()) return;
+							frame(color);
+							await sleep(unit() * (sym === '.' ? 1 : 3));
+							frame('off');
+							await sleep(unit());
+						}
+						if (l < words[w].length - 1) await sleep(unit() * 2);
+					}
+					if (w < words.length - 1) await sleep(unit() * 6);
+				}
+				if (on()) { frame('off'); stopEffect(); showStatus('Morsecode gesendet'); }
+			},
+			async music(on) {
+				if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+					showStatus('Mikrofon nicht verfügbar – der Browser erlaubt es nur bei https oder lokal geöffneter Datei', false);
+					stopEffect(); return;
+				}
+				let stream, ctx;
+				try {
+					stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+				} catch (e) {
+					if (on()) { showStatus('Mikrofon nicht erlaubt: ' + e.message, false); stopEffect(); }
+					return;
+				}
+				try {
+					if (!on()) return;
+					const AC = window.AudioContext || window.webkitAudioContext;
+					ctx = new AC();
+					if (ctx.resume) await ctx.resume();
+					const an = ctx.createAnalyser();
+					an.fftSize = 512;
+					ctx.createMediaStreamSource(stream).connect(an);
+					const data = new Uint8Array(an.frequencyBinCount);
+					const cols = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'magenta', 'white'];
+					let avg = 0, last = 0, c = '';
+					while (on()) {
+						an.getByteFrequencyData(data);
+						let e = 0;
+						for (let k = 0; k < 8; k++) e += data[k];
+						e /= 8;
+						avg = avg * 0.96 + e * 0.04;
+						const now = Date.now();
+						if (e > 50 && e > avg * 1.3 && now - last > 300 / spd()) {
+							last = now;
+							let n; do { n = pick(cols); } while (n === c);
+							c = n;
+							frame(c);
+						}
+						await sleep(30);
+					}
+				} finally {
+					stream.getTracks().forEach(t => t.stop());
+					if (ctx && ctx.close) ctx.close();
+				}
+			},
+			async sunrise(on) {
+				const a = alarm;
+				if (!a) return;
+				const start = a.target - a.dur;
+				let last = '';
+				while (on()) {
+					const p = (Date.now() - start) / a.dur;
+					const c = p < 0.34 ? 'red' : p < 0.67 ? 'orange' : p < 0.92 ? 'yellow' : 'white';
+					if (c !== last) { last = c; frame(c); }
+					if (p >= 1) break;
+					await sleep(500);
+				}
+				if (!on()) return;
+				disarmAlarm();
+				showStatus('Guten Morgen! ☀ LED geht in 15 Minuten aus');
+				const end = Date.now() + 15 * 60000;
+				while (on() && Date.now() < end) await sleep(1000);
+				if (on()) { frame('off'); stopEffect(); showStatus('Wecker: LED aus'); }
+			}
+		};
+
+		function runEffect(name) {
+			stopEffect();
+			currentFx = name;
+			const my = token;
+			const btn = document.querySelector(`.fx[data-fx="${name}"]`);
+			if (btn) btn.classList.add('active');
+			EFFECTS[name](() => token === my);
+		}
+
+		function toggleEffect(name) {
+			if (currentFx === name) { stopEffect(); showStatus('Effekt beendet'); return; }
+			showStatus('Effekt: ' + name.toUpperCase());
+			runEffect(name);
+		}
+
+		// ---------- Einschlaf-Timer ----------
+		let sleepEnd = 0, sleepTimer = null;
+
+		$('sleep-sel').addEventListener('change', e => {
+			clearInterval(sleepTimer);
+			const min = +e.target.value;
+			if (!min) { $('sleep-left').textContent = ''; showStatus('Timer aus'); return; }
+			sleepEnd = Date.now() + min * 60000;
+			showStatus('LED geht in ' + min + ' Minuten aus');
+			sleepTimer = setInterval(tickSleep, 1000);
+			tickSleep();
+		});
+
+		function tickSleep() {
+			const left = Math.max(0, sleepEnd - Date.now());
+			const m = Math.floor(left / 60000), s = Math.floor(left % 60000 / 1000);
+			$('sleep-left').textContent = `${m}:${String(s).padStart(2, '0')}`;
+			if (left <= 0) {
+				clearInterval(sleepTimer);
+				$('sleep-left').textContent = '';
+				$('sleep-sel').value = '0';
+				stopEffect();
+				frame('off');
+				showStatus('Einschlaf-Timer: LED aus');
+			}
+		}
+
+		// ---------- Bildschirm wach halten ----------
+		let wakeLock = null;
+
+		async function setWake(want) {
+			try {
+				if (want) {
+					if (!navigator.wakeLock) throw new Error('vom Browser hier nicht unterstützt (braucht https oder lokal)');
+					wakeLock = await navigator.wakeLock.request('screen');
+					wakeLock.addEventListener('release', () => { wakeLock = null; });
+				} else if (wakeLock) {
+					await wakeLock.release();
+					wakeLock = null;
+				}
+				$('wake').checked = !!want;
+			} catch (e) {
+				$('wake').checked = false;
+				showStatus('Bildschirm wach halten nicht möglich: ' + e.message, false);
+			}
+		}
+		$('wake').addEventListener('change', e => setWake(e.target.checked));
+		document.addEventListener('visibilitychange', () => {
+			if (document.visibilityState === 'visible' && $('wake').checked && !wakeLock) setWake(true);
+		});
+
+		// ---------- Wecker ----------
+		let alarm = null, alarmTimer = null;
+
+		function fmtLeft(ms) {
+			const m = Math.ceil(ms / 60000);
+			return m >= 60 ? Math.floor(m / 60) + ' Std. ' + (m % 60) + ' Min.' : m + ' Min.';
+		}
+
+		function toggleAlarm() {
+			if (alarm) { disarmAlarm(); showStatus('Wecker aus'); return; }
+			const v = $('alarm-time').value;
+			if (!v) { showStatus('Bitte eine Weckzeit wählen', false); return; }
+			const [h, m] = v.split(':').map(Number);
+			const t = new Date();
+			t.setHours(h, m, 0, 0);
+			if (t.getTime() <= Date.now()) t.setDate(t.getDate() + 1);
+			alarm = { target: t.getTime(), dur: +$('alarm-dur').value * 60000, fired: false, label: v };
+			$('alarm-btn').classList.add('active');
+			$('alarm-btn').textContent = '⏰ WECKER AUS';
+			setWake(true);
+			clearInterval(alarmTimer);
+			alarmTimer = setInterval(tickAlarm, 1000);
+			tickAlarm();
+			showStatus('Wecker gestellt auf ' + v);
+		}
+
+		function tickAlarm() {
+			if (!alarm || alarm.fired) return;
+			const now = Date.now(), start = alarm.target - alarm.dur;
+			if (now < start) {
+				$('alarm-info').textContent = `Wecker ${alarm.label} · Sonnenaufgang startet in ${fmtLeft(start - now)}`;
+				return;
+			}
+			clearInterval(alarmTimer);
+			$('alarm-info').textContent = `Sonnenaufgang läuft · Weckzeit ${alarm.label}`;
+			showStatus('Wecker: Sonnenaufgang startet');
+			runEffect('sunrise');
+			if (alarm) alarm.fired = true;
+		}
+
+		function disarmAlarm() {
+			clearInterval(alarmTimer);
+			alarm = null;
+			$('alarm-btn').classList.remove('active');
+			$('alarm-btn').textContent = '⏰ WECKER STELLEN';
+			$('alarm-info').textContent = '';
+		}
+
+		// ---------- Alles aus ----------
+		function allOff() {
+			stopEffect();
+			clearInterval(sleepTimer);
+			$('sleep-sel').value = '0';
+			$('sleep-left').textContent = '';
+			disarmAlarm();
+			frame('off');
+			showStatus('Alles aus: Effekte, Timer und Wecker beendet, LED aus');
+		}
+
+		// ---------- Vollbild ----------
+		const fullBtn = $('full-btn');
+		const root = document.documentElement;
+		if (!(root.requestFullscreen || root.webkitRequestFullscreen)) fullBtn.style.display = 'none';
+
+		function toggleFullscreen() {
+			const active = document.fullscreenElement || document.webkitFullscreenElement;
+			if (!active) {
+				const p = (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+				if (p && p.catch) p.catch(e => showStatus('Vollbild nicht möglich: ' + e.message, false));
+			} else {
+				(document.exitFullscreen || document.webkitExitFullscreen).call(document);
+			}
+		}
+		function updateFullBtn() {
+			fullBtn.textContent = (document.fullscreenElement || document.webkitFullscreenElement) ? '✕ VOLLBILD AUS' : '⛶ VOLLBILD';
+		}
+		document.addEventListener('fullscreenchange', updateFullBtn);
+		document.addEventListener('webkitfullscreenchange', updateFullBtn);
+	</script>
+</body>
+</html>
