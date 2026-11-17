@@ -39,6 +39,12 @@
 		#conn.online{background:rgba(34,197,94,.15); color:#33cc33; border-color:rgba(34,197,94,.5);}
 		#conn.offline{background:rgba(239,68,68,.15); color:#ff6666; border-color:rgba(239,68,68,.5);}
 
+		.ip-row input[type=text]{padding:9px 10px; border-radius:8px; background:#1a1a4a; color:#e0e0e0; border:1px solid #6666cc; font-size:.95rem; width:170px; font-family:monospace;}
+		input[type=time]{padding:8px 10px; border-radius:8px; background:#1a1a4a; color:#e0e0e0; border:1px solid #6666cc; font-size:1.05rem; color-scheme:dark;}
+		.note{font-size:.78rem; color:#aab; margin:6px 0 0; line-height:1.4;}
+		.btn.alloff{background:#8a1f1f; color:#fff; border:1px solid #ff6666; font-size:1.05rem; padding:12px 26px;}
+		.btn.alloff:hover{background:#c02a2a;}
+		#hint{font-size:.78rem; color:#aab; margin:4px 0 0; line-height:1.4;}
 		#preview{width:34px; height:34px; border-radius:50%; background:#222; border:2px solid #555; display:inline-block; vertical-align:middle; transition:background .1s, box-shadow .1s;}
 
 		#status{margin-top:12px; min-height:1.4em; font-family:monospace; font-size:.9rem;}
@@ -51,6 +57,16 @@
 	<div class='card' id='card'>
 		<h1>WRZT - Lichtsteuerung.</h1>
 		<div><span id='conn'>● Prüfe …</span> <span id='preview'></span></div>
+		<div><button class='btn alloff' onclick="allOff()">⏻ ALLES AUS</button></div>
+
+		<h2>Verbindung</h2>
+		<div class='row ip-row'>
+			<label>ESP32</label>
+			<input type='text' id='ip' placeholder='http://192.168.129.48' autocomplete='off' autocapitalize='off' spellcheck='false'>
+			<button class='btn fx' onclick="saveIp()">Speichern</button>
+			<button class='btn fx' onclick="testConn()">Testen</button>
+		</div>
+		<p id='hint'></p>
 
 		<h2>Farben</h2>
 		<button class='btn red' onclick="setColor('red')">ROT</button>
@@ -71,11 +87,57 @@
 		<button class='btn fx' data-fx='party' onclick="toggleEffect('party')">🎉 PARTY</button>
 		<button class='btn fx' data-fx='police' onclick="toggleEffect('police')">🚨 POLIZEI</button>
 		<button class='btn fx' data-fx='sunset' onclick="toggleEffect('sunset')">🌅 SONNENUNTERGANG</button>
+		<button class='btn fx' data-fx='music' onclick="toggleEffect('music')">🎵 MUSIK</button>
 		<div class='row'>
 			<label>Tempo</label>
 			<input type='range' id='speed' min='1' max='10' value='5'>
 			<span class='val' id='speed-val'>5</span>
 		</div>
+
+		<div class='row'>
+			<label>Kerze</label>
+			<select id='candle-level'>
+				<option value='calm'>ruhig</option>
+				<option value='normal' selected>normal</option>
+				<option value='windy'>windig</option>
+			</select>
+		</div>
+		<p class='note'>🎵 Musik: Die Farbe wechselt im Takt der Bässe (Mikrofon). Das Tempo begrenzt, wie schnell.</p>
+
+		<h2>Morsecode</h2>
+		<div class='row ip-row'>
+			<input type='text' id='morse-text' placeholder='Text, z. B. SOS' maxlength='60' style='width:200px'>
+			<select id='morse-color'>
+				<option value='white'>weiß</option>
+				<option value='orange'>orange</option>
+				<option value='red'>rot</option>
+				<option value='green'>grün</option>
+				<option value='blue'>blau</option>
+				<option value='yellow'>gelb</option>
+				<option value='aqua'>aqua</option>
+				<option value='magenta'>magenta</option>
+			</select>
+		</div>
+		<button class='btn fx' data-fx='morse' onclick="toggleEffect('morse')">📡 SENDEN</button>
+
+		<h2>Wecker</h2>
+		<div class='row'>
+			<label>Weckzeit</label>
+			<input type='time' id='alarm-time' value='07:00'>
+		</div>
+		<div class='row'>
+			<label>Sonnenaufgang</label>
+			<select id='alarm-dur'>
+				<option value='1'>1 Min. vorher</option>
+				<option value='5'>5 Min. vorher</option>
+				<option value='10' selected>10 Min. vorher</option>
+				<option value='15'>15 Min. vorher</option>
+				<option value='30'>30 Min. vorher</option>
+			</select>
+		</div>
+		<button class='btn fx' id='alarm-btn' onclick="toggleAlarm()">⏰ WECKER STELLEN</button>
+		<p class='note' id='alarm-info'></p>
+		<p class='note'>Der Wecker läuft nur, solange diese Seite geöffnet ist und das Handy nicht schläft.</p>
 
 		<h2>Einschlaf-Timer</h2>
 		<div class='row'>
@@ -91,6 +153,7 @@
 
 		<h2>Anzeige</h2>
 		<button class='btn fx' id='full-btn' onclick="toggleFullscreen()">⛶ VOLLBILD</button>
+		<p class='note'><label><input type='checkbox' id='wake'> Bildschirm wach halten</label></p>
 
 		<div id='status'></div>
 		<p><small>Zaminia System Status: Online</small></p>
@@ -98,12 +161,76 @@
 
 	<script>
 		// ---------- Basis ----------
-		const API_BASE = (window.location.protocol === 'http:' || window.location.protocol === 'https:')
-			&& window.location.hostname !== 'localhost'
-			&& !window.location.hostname.includes('github')
-			? window.location.origin
-			: 'http://esp32gpio.local';
+		// Adresse des ESP32: gespeicherte IP > eigene Adresse (wenn vom ESP32 geladen) > esp32gpio.local
+		let savedIp = '';
+		try { savedIp = localStorage.getItem('esp32ip') || ''; } catch {}
 
+		// Aus "83.134.55.39:318", "http://83.134.55.39:318/" usw. wird "http://83.134.55.39:318"
+		function normalizeBase(v) {
+			v = v.trim();
+			if (!v) return '';
+			const m = v.match(/^(https?):\/\//i);
+			const scheme = m ? m[1].toLowerCase() : 'http';
+			const host = v.replace(/^https?:\/\//i, '').replace(/[\/?#].*$/, '');
+			return host ? scheme + '://' + host : '';
+		}
+
+		function getBase() {
+			if (savedIp) return normalizeBase(savedIp);
+			const served = (location.protocol === 'http:' || location.protocol === 'https:')
+				&& location.hostname !== 'localhost' && !location.hostname.includes('github');
+			return served ? location.origin : 'http://esp32gpio.local';
+		}
+
+		// Anfrage an den ESP32. Von fremder Adresse aus im no-cors-Modus:
+		// der Befehl kommt an, nur die Antwort darf die Seite nicht lesen.
+		async function call(path, timeoutMs) {
+			const base = getBase();
+			const same = base === location.origin;
+			const ctrl = new AbortController();
+			const t = timeoutMs ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+			try {
+				const r = await fetch(base + path, { mode: same ? 'cors' : 'no-cors', signal: ctrl.signal });
+				if (same && !r.ok) throw new Error('HTTP ' + r.status);
+			} finally { if (t) clearTimeout(t); }
+		}
+
+		function friendlyError(e) {
+			if (location.protocol === 'https:' && getBase().startsWith('http:'))
+				return 'Seite per https geöffnet – der ESP32 (http) wird vom Browser blockiert. Seite per http oder lokal öffnen.';
+			if (e && /^HTTP/.test(e.message)) return 'ESP32 meldet ' + e.message;
+			return 'ESP32 unter ' + getBase() + ' nicht erreichbar – gleiches WLAN? IP richtig?';
+		}
+
+		function updateHint() {
+			const h = $('hint');
+			h.textContent = 'Verwendet: ' + getBase() + (savedIp ? '' : '  (keine Adresse gespeichert)');
+			if (location.protocol === 'https:' && getBase().startsWith('http:')) {
+				h.appendChild(document.createElement('br'));
+				const a = document.createElement('a');
+				a.href = location.href.replace(/^https:/, 'http:');
+				a.textContent = '⚠ Seite ist per https geöffnet – hier per http öffnen';
+				a.style.color = '#ffd27a';
+				h.appendChild(a);
+			}
+		}
+
+		function saveIp() {
+			savedIp = normalizeBase($('ip').value);
+			$('ip').value = savedIp ? normalizeBase(savedIp) : '';
+			try { savedIp ? localStorage.setItem('esp32ip', savedIp) : localStorage.removeItem('esp32ip'); } catch {}
+			updateHint();
+			showStatus(savedIp ? 'Adresse gespeichert: ' + savedIp : 'Adresse gelöscht');
+			ping();
+		}
+
+		async function testConn() {
+			showStatus('Teste ' + getBase() + ' …');
+			try { await call('/info', 4000); setOnline(true); showStatus('ESP32 antwortet unter ' + getBase()); }
+			catch (e) { setOnline(false); showStatus(friendlyError(e), false); }
+		}
+
+		// ---------- Hilfsfunktionen ----------
 		const $ = id => document.getElementById(id);
 		const statusEl = $('status'), cardEl = $('card'), previewEl = $('preview'), connEl = $('conn');
 
@@ -131,14 +258,11 @@
 		}
 
 		async function ping() {
-			const ctrl = new AbortController();
-			const t = setTimeout(() => ctrl.abort(), 3000);
-			try {
-				const r = await fetch(API_BASE + '/info', { signal: ctrl.signal });
-				setOnline(r.ok);
-			} catch { setOnline(false); }
-			clearTimeout(t);
+			try { await call('/info', 3000); setOnline(true); }
+			catch { setOnline(false); }
 		}
+		$('ip').value = savedIp;
+		updateHint();
 		ping();
 		setInterval(ping, 5000);
 
@@ -151,12 +275,11 @@
 			while (pending) {
 				const color = pending; pending = null;
 				try {
-					const r = await fetch(API_BASE + '/rgb?color=' + color);
-					if (!r.ok) throw new Error('HTTP ' + r.status);
+					await call('/rgb?color=' + color, 4000);
 					setOnline(true);
 				} catch (e) {
 					setOnline(false);
-					showStatus('Fehler: ' + e.message, false);
+					showStatus(friendlyError(e), false);
 				}
 			}
 			sending = false;
@@ -178,6 +301,7 @@
 
 		function stopEffect() {
 			token++;
+			if (typeof alarm !== 'undefined' && alarm && alarm.fired) disarmAlarm();
 			currentFx = null;
 			document.querySelectorAll('.fx[data-fx]').forEach(b => b.classList.remove('active'));
 		}
@@ -193,16 +317,30 @@
 			$('speed-val').textContent = speed;
 		});
 
+		const CANDLE = {
+			calm:   { orange: 0.80, hold: [350, 800], longP: 0.20, long: [900, 1600] },
+			normal: { orange: 0.60, hold: [150, 400], longP: 0.15, long: [500, 900] },
+			windy:  { orange: 0.45, hold: [70, 200],  longP: 0.05, long: [300, 500] }
+		};
+
+		const MORSE = {
+			A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:'.-..',M:'--',
+			N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..',
+			0:'-----',1:'.----',2:'..---',3:'...--',4:'....-',5:'.....',6:'-....',7:'--...',8:'---..',9:'----.'
+		};
+
 		const EFFECTS = {
-			// Kerze: zufällig Gelb / Orange, Orange etwas häufiger, gelegentlich längere Ruhe
+			// Kerze: zufällig Gelb / Orange, in drei Stufen (ruhig / normal / windig)
 			async candle(on) {
 				let last = '';
 				while (on()) {
-					let c = Math.random() < 0.6 ? 'orange' : 'yellow';
+					const L = CANDLE[$('candle-level').value] || CANDLE.normal;
+					let c = Math.random() < L.orange ? 'orange' : 'yellow';
 					if (c === last && Math.random() < 0.5) c = c === 'orange' ? 'yellow' : 'orange';
 					last = c;
 					frame(c);
-					await sleep((Math.random() < 0.15 ? rand(500, 900) : rand(150, 400)) / spd());
+					const t = Math.random() < L.longP ? rand(...L.long) : rand(...L.hold);
+					await sleep(t / spd());
 				}
 			},
 			async rainbow(on) {
@@ -243,17 +381,109 @@
 					while (on() && Date.now() < end) await sleep(250);
 				}
 				if (on()) { stopEffect(); showStatus('Sonnenuntergang beendet'); }
+			},
+			// Morsecode: Punkt = 1 Einheit, Strich = 3, Zeichenpause 3, Wortpause 7
+			async morse(on) {
+				const text = $('morse-text').value.toUpperCase()
+					.replace(/Ä/g, 'AE').replace(/Ö/g, 'OE').replace(/Ü/g, 'UE').replace(/ß/g, 'SS');
+				const color = $('morse-color').value;
+				const words = text.split(/\s+/).map(w => [...w].filter(ch => MORSE[ch])).filter(w => w.length);
+				if (!words.length) { showStatus('Bitte Text mit Buchstaben oder Ziffern eingeben', false); stopEffect(); return; }
+				const unit = () => 300 / spd();
+				for (let w = 0; w < words.length; w++) {
+					for (let l = 0; l < words[w].length; l++) {
+						for (const sym of MORSE[words[w][l]]) {
+							if (!on()) return;
+							frame(color);
+							await sleep(unit() * (sym === '.' ? 1 : 3));
+							frame('off');
+							await sleep(unit());                       // Pause zwischen Zeichen
+						}
+						if (l < words[w].length - 1) await sleep(unit() * 2);   // insgesamt 3 zwischen Buchstaben
+					}
+					if (w < words.length - 1) await sleep(unit() * 6);          // insgesamt 7 zwischen Wörtern
+				}
+				if (on()) { frame('off'); stopEffect(); showStatus('Morsecode gesendet'); }
+			},
+			// Musik: Farbwechsel bei Bass-Schlägen (Mikrofon)
+			async music(on) {
+				if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+					showStatus('Mikrofon nicht verfügbar – der Browser erlaubt es nur bei https oder lokal geöffneter Datei', false);
+					stopEffect(); return;
+				}
+				let stream, ctx;
+				try {
+					stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+				} catch (e) {
+					if (on()) { showStatus('Mikrofon nicht erlaubt: ' + e.message, false); stopEffect(); }
+					return;
+				}
+				try {
+					if (!on()) return;
+					const AC = window.AudioContext || window.webkitAudioContext;
+					ctx = new AC();
+					if (ctx.resume) await ctx.resume();
+					const an = ctx.createAnalyser();
+					an.fftSize = 512;
+					ctx.createMediaStreamSource(stream).connect(an);
+					const data = new Uint8Array(an.frequencyBinCount);
+					const cols = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'magenta', 'white'];
+					let avg = 0, last = 0, c = '';
+					while (on()) {
+						an.getByteFrequencyData(data);
+						let e = 0;
+						for (let k = 0; k < 8; k++) e += data[k];
+						e /= 8;
+						avg = avg * 0.96 + e * 0.04;
+						const now = Date.now();
+						if (e > 50 && e > avg * 1.3 && now - last > 300 / spd()) {
+							last = now;
+							let n; do { n = pick(cols); } while (n === c);
+							c = n;
+							frame(c);
+						}
+						await sleep(30);
+					}
+				} finally {
+					stream.getTracks().forEach(t => t.stop());
+					if (ctx && ctx.close) ctx.close();
+				}
+			},
+			// Sonnenaufgang für den Wecker: Rot → Orange → Gelb → Weiß, danach 15 Min. halten, dann aus
+			async sunrise(on) {
+				const a = alarm;
+				if (!a) return;
+				const start = a.target - a.dur;
+				let last = '';
+				while (on()) {
+					const p = (Date.now() - start) / a.dur;
+					const c = p < 0.34 ? 'red' : p < 0.67 ? 'orange' : p < 0.92 ? 'yellow' : 'white';
+					if (c !== last) { last = c; frame(c); }
+					if (p >= 1) break;
+					await sleep(500);
+				}
+				if (!on()) return;
+				disarmAlarm();
+				showStatus('Guten Morgen! ☀ LED geht in 15 Minuten aus');
+				const end = Date.now() + 15 * 60000;
+				while (on() && Date.now() < end) await sleep(1000);
+				if (on()) { frame('off'); stopEffect(); showStatus('Wecker: LED aus'); }
 			}
 		};
 
-		function toggleEffect(name) {
-			if (currentFx === name) { stopEffect(); showStatus('Effekt beendet'); return; }
+		function runEffect(name) {
 			stopEffect();
 			currentFx = name;
 			const my = token;
-			document.querySelector(`.fx[data-fx="${name}"]`).classList.add('active');
-			showStatus('Effekt: ' + name.toUpperCase());
+			const btn = document.querySelector(`.fx[data-fx="${name}"]`);
+			if (btn) btn.classList.add('active');
 			EFFECTS[name](() => token === my);
+		}
+
+		function toggleEffect(name) {
+			if (currentFx === name) { stopEffect(); showStatus('Effekt beendet'); return; }
+			showStatus('Effekt: ' + name.toUpperCase());
+			runEffect(name);
 		}
 
 		// ---------- Einschlaf-Timer ----------
@@ -281,6 +511,89 @@
 				frame('off');
 				showStatus('Einschlaf-Timer: LED aus');
 			}
+		}
+
+		// ---------- Bildschirm wach halten ----------
+		let wakeLock = null;
+
+		async function setWake(want) {
+			try {
+				if (want) {
+					if (!navigator.wakeLock) throw new Error('vom Browser hier nicht unterstützt (braucht https oder lokal)');
+					wakeLock = await navigator.wakeLock.request('screen');
+					wakeLock.addEventListener('release', () => { wakeLock = null; });
+				} else if (wakeLock) {
+					await wakeLock.release();
+					wakeLock = null;
+				}
+				$('wake').checked = !!want;
+			} catch (e) {
+				$('wake').checked = false;
+				showStatus('Bildschirm wach halten nicht möglich: ' + e.message, false);
+			}
+		}
+		$('wake').addEventListener('change', e => setWake(e.target.checked));
+		document.addEventListener('visibilitychange', () => {
+			if (document.visibilityState === 'visible' && $('wake').checked && !wakeLock) setWake(true);
+		});
+
+		// ---------- Wecker ----------
+		let alarm = null, alarmTimer = null;
+
+		function fmtLeft(ms) {
+			const m = Math.ceil(ms / 60000);
+			return m >= 60 ? Math.floor(m / 60) + ' Std. ' + (m % 60) + ' Min.' : m + ' Min.';
+		}
+
+		function toggleAlarm() {
+			if (alarm) { disarmAlarm(); showStatus('Wecker aus'); return; }
+			const v = $('alarm-time').value;
+			if (!v) { showStatus('Bitte eine Weckzeit wählen', false); return; }
+			const [h, m] = v.split(':').map(Number);
+			const t = new Date();
+			t.setHours(h, m, 0, 0);
+			if (t.getTime() <= Date.now()) t.setDate(t.getDate() + 1);   // schon vorbei → morgen
+			alarm = { target: t.getTime(), dur: +$('alarm-dur').value * 60000, fired: false, label: v };
+			$('alarm-btn').classList.add('active');
+			$('alarm-btn').textContent = '⏰ WECKER AUS';
+			setWake(true);
+			clearInterval(alarmTimer);
+			alarmTimer = setInterval(tickAlarm, 1000);
+			tickAlarm();
+			showStatus('Wecker gestellt auf ' + v);
+		}
+
+		function tickAlarm() {
+			if (!alarm || alarm.fired) return;
+			const now = Date.now(), start = alarm.target - alarm.dur;
+			if (now < start) {
+				$('alarm-info').textContent = `Wecker ${alarm.label} · Sonnenaufgang startet in ${fmtLeft(start - now)}`;
+				return;
+			}
+			clearInterval(alarmTimer);
+			$('alarm-info').textContent = `Sonnenaufgang läuft · Weckzeit ${alarm.label}`;
+			showStatus('Wecker: Sonnenaufgang startet');
+			runEffect('sunrise');       // stopEffect() darin darf den Wecker noch nicht abschalten
+			if (alarm) alarm.fired = true;
+		}
+
+		function disarmAlarm() {
+			clearInterval(alarmTimer);
+			alarm = null;
+			$('alarm-btn').classList.remove('active');
+			$('alarm-btn').textContent = '⏰ WECKER STELLEN';
+			$('alarm-info').textContent = '';
+		}
+
+		// ---------- Alles aus ----------
+		function allOff() {
+			stopEffect();
+			clearInterval(sleepTimer);
+			$('sleep-sel').value = '0';
+			$('sleep-left').textContent = '';
+			disarmAlarm();
+			frame('off');
+			showStatus('Alles aus: Effekte, Timer und Wecker beendet, LED aus');
 		}
 
 		// ---------- Vollbild ----------
