@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang='de'>
+<head>
+	<meta charset='UTF-8'>
+	<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+	<title>WRZT · Kerzen- & RGB-Steuerung (GPIO 5)</title>
+	<style>
+		body{background:#1a1a4a; color:#e0e0e0; text-align:center; font-family:sans-serif; padding:20px 10px; margin:0; min-height:100vh; box-sizing:border-box;}
+		.card{margin-top: 20px; background:#2a2a6a; padding: 20px; border-radius:15px; display:inline-block; border: 1px solid #444; transition: box-shadow .12s; max-width:560px; width:100%; box-sizing:border-box;}
+		.btn{padding:10px 16px; font-size:.95rem; margin:5px; border:none; border-radius:8px; cursor:pointer; font-weight:bold; transition: 0.3s;}
+
+		.on-btn{background:#e0b020; color:#222;} .on-btn:hover{background:#ffcc44;}
+		.off{background:#555; color:white;} .off:hover{background:#777;}
+
+		.fx{background:#3b3b8f; color:white; border:1px solid #6666cc;}
+		.fx:hover{background:#5555bb;}
+		.fx.active{box-shadow:0 0 14px 3px #8fa0ff; outline:2px solid #c3ccff;}
+		.fx.candle{background:linear-gradient(135deg,#d9a520,#cc5500); border-color:#ffb347;}
+		.fx.candle.active{box-shadow:0 0 14px 3px #ff9a2e; outline-color:#ffd27a;}
+
+		h2{font-size:.8rem; letter-spacing:.15em; text-transform:uppercase; color:#9fa8ff; margin:22px 0 6px; border-top:1px solid #444; padding-top:14px;}
+		.row{display:flex; align-items:center; justify-content:center; gap:12px; margin:8px 0; flex-wrap:wrap;}
+		.row label{min-width:70px; text-align:right; font-size:.9rem;}
+		.row .val{min-width:30px; text-align:left; font-family:monospace; color:#9fa8ff;}
+		input[type=range]{flex:1; min-width:140px; max-width:260px; accent-color:#8fa0ff;}
+		select{padding:8px 10px; border-radius:8px; background:#1a1a4a; color:#e0e0e0; border:1px solid #6666cc; font-size:.95rem;}
+
+		#conn{display:inline-block; padding:4px 12px; border-radius:20px; font-family:monospace; font-size:.8rem; background:rgba(100,116,139,.25); color:#aab; border:1px solid #556;}
+		#conn.online{background:rgba(34,197,94,.15); color:#33cc33; border-color:rgba(34,197,94,.5);}
+		#conn.offline{background:rgba(239,68,68,.15); color:#ff6666; border-color:rgba(239,68,68,.5);}
+
+		.ip-row input[type=text]{padding:9px 10px; border-radius:8px; background:#1a1a4a; color:#e0e0e0; border:1px solid #6666cc; font-size:.95rem; width:170px; font-family:monospace;}
+		input[type=time]{padding:8px 10px; border-radius:8px; background:#1a1a4a; color:#e0e0e0; border:1px solid #6666cc; font-size:1.05rem; color-scheme:dark;}
+		.note{font-size:.78rem; color:#aab; margin:6px 0 0; line-height:1.4;}
+		.btn.alloff{background:#8a1f1f; color:#fff; border:1px solid #ff6666; font-size:1.05rem; padding:12px 26px;}
+		.btn.alloff:hover{background:#c02a2a;}
+		#hint{font-size:.78rem; color:#aab; margin:4px 0 0; line-height:1.4;}
+		
+		#preview{width:36px; height:36px; border-radius:50%; background:#222; border:2px solid #555; display:inline-block; vertical-align:middle; transition:background .08s, box-shadow .08s;}
+
+		#status{margin-top:12px; min-height:1.4em; font-family:monospace; font-size:.9rem;}
+		#status.ok{color:#33cc33;}
+		#status.err{color:#ff6666;}
+		#sleep-left{font-family:monospace; color:#ffd27a; min-width:70px; text-align:left;}
+	</style>
+</head>
+<body>
+	<div class='card' id='card'>
+		<h1>WRZT - Kerze & RGB (GPIO 5)</h1>
+		<div><span id='conn'>● Prüfe …</span> <span id='preview'></span></div>
+		<div><button class='btn alloff' onclick="allOff()">⏻ ALLES AUS</button></div>
+
+		<h2>Verbindung</h2>
+		<div class='row ip-row'>
+			<label>ESP32</label>
+			<input type='text' id='ip' placeholder='http://192.168.129.48' autocomplete='off' autocapitalize='off' spellcheck='false'>
+			<button class='btn fx' onclick="saveIp()">Speichern</button>
+			<button class='btn fx' onclick="testConn()">Testen</button>
+		</div>
+		<p id='hint'></p>
+
+		<h2>Manuelle Steuerung</h2>
+		<button class='btn on-btn' onclick="setManualBrightness(255)">VOLL (100%)</button>
+		<button class='btn on-btn' onclick="setManualBrightness(128)">HALB (50%)</button>
+		<button class='btn off' onclick="setManualBrightness(0)">AUS (0%)</button>
+		
+		<div class='row' style='margin-top:14px;'>
+			<label>Helligkeit</label>
+			<input type='range' id='manual-bright' min='0' max='255' value='128'>
+			<span class='val' id='bright-val'>128</span>
+		</div>
+
+		<h2>Flacker-Effekt (Kerze)</h2>
+		<button class='btn fx candle active' data-fx='candle' onclick="toggleCandleFx()">🕯 KERZENFLAMME (AN/AUS)</button>
+		
+		<div class='row'>
+			<label>Tempo</label>
+			<input type='range' id='speed' min='1' max='10' value='5'>
+			<span class='val' id='speed-val'>5</span>
+		</div>
+
+		<div class='row'>
+			<label>Charakter</label>
+			<select id='candle-level'>
+				<option value='calm'>ruhig (Sanft)</option>
+				<option value='normal' selected>normal (Lebendig)</option>
+				<option value='windy'>windig (Flackernd)</option>
+			</select>
+		</div>
+
+		<h2>Anzeige & Optionen</h2>
+		<button class='btn fx' id='full-btn' onclick="toggleFullscreen()">⛶ VOLLBILD</button>
+		<p class='note'><label><input type='checkbox' id='wake' checked> Bildschirm wach halten</label></p>
+
+		<div id='status'></div>
+		<p><small>Zaminia System Status: Online</small></p>
+	</div>
+
+	<script>
+		let savedIp = '';
+		try { savedIp = localStorage.getItem('esp32ip') || ''; } catch {}
+
+		function normalizeBase(v) {
+			v = v.trim();
+			if (!v) return '';
+			const m = v.match(/^(https?):\/\//i);
+			const scheme = m ? m[1].toLowerCase() : 'http';
+			const host = v.replace(/^https?:\/\//i, '').replace(/[\/?#].*$/, '');
+			return host ? scheme + '://' + host : '';
+		}
+
+		function getBase() {
+			if (savedIp) return normalizeBase(savedIp);
+			const served = (location.protocol === 'http:' || location.protocol === 'https:')
+				&& location.hostname !== 'localhost' && !location.hostname.includes('github');
+			return served ? location.origin : 'http://esp32gpio.local';
+		}
+
+		async function call(path, timeoutMs) {
+			const base = getBase();
+			const same = base === location.origin;
+			const ctrl = new AbortController();
+			const t = timeoutMs ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+			try {
+				const r = await fetch(base + path, { mode: same ? 'cors' : 'no-cors', signal: ctrl.signal });
+				if (same && !r.ok) throw new Error('HTTP ' + r.status);
+			} finally { if (t) clearTimeout(t); }
+		}
+
+		function friendlyError(e) {
+			if (location.protocol === 'https:' && getBase().startsWith('http:'))
+				return 'Seite per https geöffnet – der ESP32 (http) wird vom Browser blockiert.';
+			if (e && /^HTTP/.test(e.message)) return 'ESP32 meldet ' + e.message;
+			return 'ESP32 unter ' + getBase() + ' nicht erreichbar.';
+		}
+
+		function updateHint() {
+			$('hint').textContent = 'Verwendet: ' + getBase() + (savedIp ? '' : '  (Standard)');
+		}
+
+		function saveIp() {
+			savedIp = normalizeBase($('ip').value);
+			$('ip').value = savedIp ? normalizeBase(savedIp) : '';
+			try { savedIp ? localStorage.setItem('esp32ip', savedIp) : localStorage.removeItem('esp32ip'); } catch {}
+			updateHint();
+			showStatus(savedIp ? 'Adresse gespeichert: ' + savedIp : 'Adresse gelöscht');
+			ping();
+		}
+
+		async function testConn() {
+			showStatus('Teste ' + getBase() + ' …');
+			try { await call('/info', 4000); setOnline(true); showStatus('ESP32 erreichbar!'); }
+			catch (e) { setOnline(false); showStatus(friendlyError(e), false); }
+		}
+
+		const $ = id => document.getElementById(id);
+		const statusEl = $('status'), cardEl = $('card'), previewEl = $('preview'), connEl = $('conn');
+
+		function showStatus(text, ok = true) {
+			statusEl.className = ok ? 'ok' : 'err';
+			statusEl.textContent = text;
+		}
+
+		function setOnline(on) {
+			connEl.textContent = on ? '● Online' : '● Offline';
+			connEl.className = on ? 'online' : 'offline';
+		}
+
+		async function ping() {
+			try { await call('/info', 3000); setOnline(true); } catch { setOnline(false); }
+		}
+		$('ip').value = savedIp;
+		updateHint();
+		ping();
+		setInterval(ping, 5000);
+
+		// Sende-Warteschlange (High-Speed Fetch für flüssiges Flackern)
+		let sending = false, pendingPath = null;
+		async function pump() {
+			if (sending) return;
+			sending = true;
+			while (pendingPath) {
+				const path = pendingPath; pendingPath = null;
+				try { await call(path, 2000); setOnline(true); } 
+				catch { setOnline(false); }
+			}
+			sending = false;
+		}
+
+		function updatePreview(val) {
+			const p = val / 255;
+			const r = Math.round(255 * p);
+			const g = Math.round(140 * p);
+			const b = Math.round(20 * p);
+			const hex = val === 0 ? '#222' : `rgb(${r},${g},${b})`;
+			previewEl.style.background = hex;
+			previewEl.style.boxShadow = val === 0 ? 'none' : `0 0 14px 4px rgba(255,140,20,${p})`;
+			cardEl.style.boxShadow = val === 0 ? 'none' : `0 0 30px 4px rgba(255,120,10,${p * 0.4})`;
+		}
+
+		// Senden an GPIO 5 (PWM) UND Onboard-RGB-LED gleichzeitig
+		function sendOutputs(dutyVal) {
+			dutyVal = Math.max(0, Math.min(255, Math.round(dutyVal)));
+			updatePreview(dutyVal);
+
+		   // Wir steuern GPIO 5 via /pwm und die Onboard-RGB (Pin 48) im gleichen Farbton via /rgb an
+			const p = dutyVal / 255;
+			const r = Math.round(255 * p);
+			const g = Math.round(130 * p); // Schöner warmer Kerzen-Goldton
+			const b = Math.round(10 * p);
+
+			pendingPath = `/pwm?pin=5&duty=${dutyVal}`;
+			pump();
+		}
+
+		// Manuelle Steuerung über Regler / Buttons
+		function setManualBrightness(val) {
+			stopCandleFx();
+			$('manual-bright').value = val;
+			$('bright-val').textContent = val;
+			sendOutputs(val);
+			showStatus('Kerze Helligkeit → ' + Math.round((val/255)*100) + '%');
+		}
+
+		$('manual-bright').addEventListener('input', e => {
+			stopCandleFx();
+			const v = +e.target.value;
+			$('bright-val').textContent = v;
+			sendOutputs(v);
+		});
+
+		// ---------- Kerzen-Flacker-Engine (Browser-gesteuert für 0-255 Varianz) ----------
+		let candleToken = 0;
+		let isCandleRunning = true;
+
+		const CANDLE_PROFILES = {
+			calm:   { brightMin: 140, brightMax: 245, stepMs: 90,  smooth: 0.25, gustChance: 0.03 },
+			normal: { brightMin: 80,  brightMax: 255, stepMs: 70,  smooth: 0.38, gustChance: 0.10 },
+			windy:  { brightMin: 30,  brightMax: 255, stepMs: 50,  smooth: 0.55, gustChance: 0.25 }
+		};
+
+		async function runCandleLoop(myToken) {
+			let curBright = 180;
+			let targetBright = 200;
+			let gustTicks = 0;
+
+			while (isCandleRunning && candleToken === myToken) {
+				const speed = +$('speed').value / 5;
+				const profileKey = $('candle-level').value;
+				const L = CANDLE_PROFILES[profileKey] || CANDLE_PROFILES.normal;
+
+				// Zufällige Sprünge & Windböen
+				if (gustTicks <= 0 && Math.random() < L.gustChance) {
+					gustTicks = Math.floor(2 + Math.random() * 5);
+				}
+
+				if (gustTicks > 0) {
+					gustTicks--;
+					targetBright = gustTicks % 2 === 1 ? L.brightMin + Math.random() * 40 : L.brightMax - Math.random() * 30;
+				} else if (Math.random() < 0.4) {
+					targetBright = L.brightMin + Math.random() * (L.brightMax - L.brightMin);
+				}
+
+				// Sanftes Abgleichen (Glättung, damit es realistisch flackert statt springt)
+				curBright += (targetBright - curBright) * L.smooth;
+				
+				// Regler-Anzeige mitziehen
+				const finalVal = Math.round(curBright);
+				$('manual-bright').value = finalVal;
+				$('bright-val').textContent = finalVal;
+
+				// Hardware ansteuern (GPIO 5 + RGB-LED)
+				sendOutputs(finalVal);
+
+				const jitter = 0.8 + Math.random() * 0.4;
+				await new Promise(r => setTimeout(r, (L.stepMs * jitter) / speed));
+			}
+		}
+
+		function startCandleFx() {
+			isCandleRunning = true;
+			candleToken++;
+			document.querySelector('.fx.candle').classList.add('active');
+			runCandleLoop(candleToken);
+			showStatus('Kerzen-Flackern aktiv');
+		}
+
+		function stopCandleFx() {
+			isCandleRunning = false;
+			candleToken++;
+			document.querySelector('.fx.candle').classList.remove('active');
+			showStatus('Kerzen-Flackern gestoppt');
+		}
+
+		function toggleCandleFx() {
+			if (isCandleRunning) {
+				stopCandleFx();
+			} else {
+				startCandleFx();
+			}
+		}
+
+		$('speed').addEventListener('input', e => {
+			$('speed-val').textContent = e.target.value;
+		});
+
+		// Vollbild-Logik
+		const fullBtn = $('full-btn');
+		function toggleFullscreen() {
+			if (!document.fullscreenElement) {
+				document.documentElement.requestFullscreen().catch(() => showStatus('Vollbild blockiert', false));
+			} else {
+				document.exitFullscreen();
+			}
+		}
+		document.addEventListener('fullscreenchange', () => {
+			fullBtn.textContent = document.fullscreenElement ? '✕ VOLLBILD AUS' : '⛶ VOLLBILD';
+		});
+
+		// Wake Lock
+		$('wake').addEventListener('change', async e => {
+			try {
+				if (e.target.checked && navigator.wakeLock) await navigator.wakeLock.request('screen');
+			} catch { $('wake').checked = false; }
+		});
+		if($('wake').checked && navigator.wakeLock) {
+			navigator.wakeLock.request('screen').catch(() => {});
+		}
+
+		// Alles Aus
+		function allOff() {
+			stopCandleFx();
+			setManualBrightness(0);
+			showStatus('Alles aus: Kerze und LED ausgeschaltet');
+		}
+
+		// Direkt beim Start die Kerze direkt flackern lassen
+		startCandleFx();
+	</script>
+</body>
+</html>
