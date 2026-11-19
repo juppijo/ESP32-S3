@@ -77,6 +77,7 @@
 
 	.readout .big{font:600 2.3rem/1 var(--serif); letter-spacing:-.01em; font-variant-numeric:tabular-nums;}
 	.readout .sub{color:var(--mute); margin:6px 0 14px; min-height:2.6em; font-size:.92rem;}
+	.hero-btns{display:flex; flex-direction:column; gap:8px; align-items:flex-start;}
 
 	button{font:inherit; color:inherit; cursor:pointer;}
 	:focus-visible{outline:2px solid var(--flame); outline-offset:2px;}
@@ -88,6 +89,8 @@
 	.btn:active{transform:translateY(1px);}
 	.btn.primary{background:linear-gradient(135deg,#f3a52b,#e4621a); border-color:#ffc56b; color:#2a1405;}
 	.btn.primary:hover{background:linear-gradient(135deg,#ffbd4a,#f27a2f);}
+	.btn.save{background:#234632; border-color:#52a873; color:#d8f8e2;}
+	.btn.save:hover{background:#2d5940; border-color:#7fd18b;}
 	.btn.danger{background:#6d2430; border-color:#c4505f; color:#fff;}
 	.btn.danger:hover{background:#8b2d3c;}
 	.btn.on{border-color:var(--flame); box-shadow:0 0 0 2px rgba(255,178,62,.35); color:var(--flame);}
@@ -193,7 +196,10 @@
 		<div class="readout">
 			<div class="big" id="big">–</div>
 			<div class="sub" id="sub">verbinde …</div>
-			<button class="btn danger" id="alloff" type="button">⏻ Alles aus</button>
+			<div class="hero-btns">
+				<button class="btn save" id="save-esp" type="button">💾 Stand im ESP speichern</button>
+				<button class="btn danger" id="alloff" type="button">⏻ Alles aus</button>
+			</div>
 		</div>
 	</section>
 
@@ -267,28 +273,43 @@
 	</section>
 
 	<section>
-		<h2>Einschlaf-Timer & Wecker</h2>
+		<h2>Einschlaf-Timer</h2>
 		<div class="row">
 			<select id="sleep-sel" aria-label="Einschlaf-Timer">
-				<option value="0">Timer Aus</option>
+				<option value="0">Aus</option>
 				<option value="15">15 Minuten</option>
 				<option value="30">30 Minuten</option>
 				<option value="60">60 Minuten</option>
+				<option value="120">120 Minuten</option>
 			</select>
 			<span id="sleep-left"></span>
 		</div>
-		<div class="row" style="margin-top:10px;">
+	</section>
+
+	<section>
+		<h2>Wecker</h2>
+		<div class="row">
 			<label for="alarm-time">Weckzeit</label>
 			<input type="time" id="alarm-time" value="07:00">
-			<button class="btn" id="alarm-btn" type="button">⏰ Wecker</button>
 		</div>
+		<div class="row">
+			<label for="alarm-dur">Einblenden</label>
+			<select id="alarm-dur">
+				<option value="1">1 Min. vorher</option>
+				<option value="5">5 Min. vorher</option>
+				<option value="10" selected>10 Min. vorher</option>
+				<option value="15">15 Min. vorher</option>
+				<option value="30">30 Min. vorher</option>
+			</select>
+		</div>
+		<button class="btn" id="alarm-btn" type="button">⏰ Wecker stellen</button>
 		<p class="note" id="alarm-info"></p>
 	</section>
 
 	<details id="conn-details">
-		<summary>Verbindung & GPIOs</summary>
+		<summary>Verbindung & IP</summary>
 		<div class="row" style="margin-top:12px">
-			<input type="text" id="ip" placeholder="http://192.168.129.48" autocomplete="off" spellcheck="false" aria-label="ESP32 IP">
+			<input type="text" id="ip" placeholder="http://192.168.x.x" autocomplete="off" spellcheck="false" aria-label="ESP32 IP">
 			<button class="btn" id="ip-save" type="button">Speichern</button>
 			<button class="btn" id="ip-test" type="button">Testen</button>
 		</div>
@@ -296,7 +317,7 @@
 	</details>
 
 	<div id="status" role="status"></div>
-	<footer>ESP32-S3 · GPIO5 (Analog) & RGB-LED Steuerung</footer>
+	<footer>ESP32-S3 · Kerze & RGB</footer>
 </main>
 
 <script>
@@ -321,34 +342,21 @@
 		return served ? location.origin : 'http://esp32gpio.local';
 	}
 
-	async function call(path, timeoutMs) {
-		const base = getBase();
-		const same = base === location.origin;
-		const ctrl = new AbortController();
-		const t = timeoutMs ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+	// Einfacher, robuster Fetch ohne CORS-Erzwingung, die den ESP blockieren kann
+	async function call(path) {
+		const url = getBase() + path;
 		try {
-			const r = await fetch(base + path, { mode: same ? 'cors' : 'no-cors', signal: ctrl.signal });
-			if (same && !r.ok) throw new Error('HTTP ' + r.status);
-		} finally { if (t) clearTimeout(t); }
+			await fetch(url, { mode: 'no-cors' });
+		} catch (e) {
+			console.warn('Call error:', e);
+		}
 	}
 
-	async function getState(timeoutMs = 2500) {
-		const ctrl = new AbortController();
-		const t = setTimeout(() => ctrl.abort(), timeoutMs);
-		try {
-			const r = await fetch(getBase() + '/kstate', { mode: 'cors', signal: ctrl.signal, cache: 'no-store' });
-			if (!r.ok) throw new Error('HTTP ' + r.status);
-			return await r.json();
-		} finally { clearTimeout(t); }
-	}
-
-	function friendlyError(e) {
-		if (e && e.message === 'HTTP 404') return 'ESP32 kennt /kstate nicht – bitte Code mit RGB- und GPIO5-Unterstützung flashen.';
-		return 'ESP32 unter ' + getBase() + ' nicht erreichbar – gleiches WLAN?';
-	}
-
-	function updateHint() {
-		$('hint').textContent = 'Verwendet: ' + getBase() + (savedIp ? '' : ' (Standard)');
+	async function getState() {
+		const url = getBase() + '/kstate';
+		const r = await fetch(url, { cache: 'no-store' });
+		if (!r.ok) throw new Error('HTTP ' + r.status);
+		return await r.json();
 	}
 
 	function showStatus(text, ok = true) {
@@ -369,38 +377,38 @@
 		try { savedIp ? localStorage.setItem('esp32ip', savedIp) : localStorage.removeItem('esp32ip'); } catch {}
 		updateHint();
 		showStatus(savedIp ? 'Adresse gespeichert: ' + savedIp : 'Adresse gelöscht');
-		firstSync = true; poll();
+		poll();
 	});
 
 	$('ip-test').addEventListener('click', async () => {
-		showStatus('Teste ' + getBase() + ' …');
-		try { await getState(4000); setOnline(true); showStatus('Verbindung erfolgreich!'); }
-		catch (e) { setOnline(false); showStatus(friendlyError(e), false); }
+		showStatus('Teste Verbindung …');
+		try {
+			await getState();
+			setOnline(true);
+			showStatus('ESP32 erreichbar!');
+		} catch (e) {
+			setOnline(false);
+			showStatus('Nicht erreichbar (IP prüfen)', false);
+		}
 	});
 
 	$('ip').value = savedIp;
+	function updateHint() {
+		$('hint').textContent = 'Aktive Basis-URL: ' + getBase();
+	}
 	updateHint();
 
-	let sending = false, pendingPath = null;
-	async function pump() {
-		if (sending) return;
-		sending = true;
-		while (pendingPath) {
-			const path = pendingPath; pendingPath = null;
-			try { await call(path, 4000); setOnline(true); }
-			catch (e) { setOnline(false); showStatus(friendlyError(e), false); }
-		}
-		sending = false;
+	// Sofortiger Direktversand ohne verzögertes Queuing
+	function send(path) {
+		call(path);
 	}
-	function send(path) { pendingPath = path; pump(); }
 
 	const MODES = ['steady', 'flicker', 'pulse'];
 	const pct = v => Math.round(v / 2.55);
 	const pc  = v => Math.round(v * 2.55);
-	const comma = n => n.toFixed(1).replace('.', ',');
 
 	let model = { mode: 'init', level: 204, min: 38, max: 255, speed: 5, style: 1, shape: 0, out: 0 };
-	let uiMode = 'flicker', lastTouch = 0, firstSync = true;
+	let uiMode = 'flicker', lastTouch = 0;
 	try { uiMode = localStorage.getItem('kerze-ui') || 'flicker'; } catch {}
 	const touch = () => { lastTouch = Date.now(); };
 
@@ -417,13 +425,13 @@
 	function readout(s) {
 		const big = $('big'), sub = $('sub'), hint = $('mode-hint');
 		const range = `${pct(s.min)}–${pct(s.max)} %`;
-		hint.textContent = '';
+		if (hint) hint.textContent = '';
 		switch (s.mode) {
-			case 'off': big.textContent = 'Aus'; sub.textContent = 'GPIO5 & RGB ausgeschaltet.'; break;
-			case 'steady': big.textContent = pct(s.level) + ' %'; sub.textContent = 'Konstantbetrieb'; break;
-			case 'flicker': big.textContent = range; sub.textContent = 'Kerzenflackern (GPIO5 + RGB)'; break;
+			case 'off': big.textContent = 'Aus'; sub.textContent = 'Ausgeschaltet.'; break;
+			case 'steady': big.textContent = pct(s.level) + ' %'; sub.textContent = 'Konstant'; break;
+			case 'flicker': big.textContent = range; sub.textContent = 'Flackern aktiv'; break;
 			case 'pulse': big.textContent = range; sub.textContent = 'Pulsieren aktiv'; break;
-			case 'fade': big.textContent = pct(s.out) + ' %'; sub.textContent = 'Überblenden...'; break;
+			case 'fade': big.textContent = pct(s.out) + ' %'; sub.textContent = 'Blende...'; break;
 		}
 	}
 
@@ -435,8 +443,10 @@
 
 	function setSlider(id, val, fmt) {
 		const el = $(id);
+		if (!el) return;
 		el.value = val; fill(el);
-		$('v-' + id.slice(2)).textContent = fmt ? fmt(val) : val + ' %';
+		const out = $('v-' + id.slice(2));
+		if (out) out.textContent = fmt ? fmt(val) : val + ' %';
 	}
 
 	function render(s) {
@@ -450,28 +460,25 @@
 		readout(s);
 	}
 
-	function applyState(s, force) {
+	function applyState(s) {
 		model = s;
 		setGlow(s.out / 255);
-		if (!force && Date.now() - lastTouch < 2500) return;
+		if (Date.now() - lastTouch < 2500) return;
 		render(s);
 	}
 
-	let pollTimer = null;
+	// Stabile Polling-Schleife ohne Endlos-Fehlerblockaden
 	async function poll() {
-		clearTimeout(pollTimer);
-		if (document.visibilityState !== 'visible') return;
-		let delay = 600;
-		try {
-			const s = await getState();
-			setOnline(true);
-			applyState(s, firstSync);
-			firstSync = false;
-		} catch (e) {
-			setOnline(false);
-			delay = 3000;
+		if (document.visibilityState === 'visible') {
+			try {
+				const s = await getState();
+				setOnline(true);
+				applyState(s);
+			} catch (e) {
+				setOnline(false);
+			}
 		}
-		pollTimer = setTimeout(poll, delay);
+		setTimeout(poll, 1500);
 	}
 
 	document.querySelectorAll('#seg-mode button').forEach(b => b.addEventListener('click', () => {
@@ -479,16 +486,18 @@
 		const m = b.dataset.mode;
 		model = { ...model, mode: m };
 		render(model);
-		send('/kerze?mode=' + m); // Steuert im ESP32 sowohl GPIO5 als auch den RGB-Kanal synchron an
+		send('/kerze?mode=' + m);
 	}));
 
 	function bindSlider(id, fmt, path) {
 		const el = $(id);
+		if (!el) return;
 		fill(el);
 		el.addEventListener('input', () => {
 			touch(); fill(el);
 			const v = +el.value;
-			$('v-' + id.slice(2)).textContent = fmt ? fmt(v) : v + ' %';
+			const out = $('v-' + id.slice(2));
+			if (out) out.textContent = fmt ? fmt(v) : v + ' %';
 			path(v);
 		});
 	}
@@ -501,32 +510,33 @@
 	const PRESETS = [
 		{ n: 'Nachtlicht', v: { mode: 'steady', level: 10 } },
 		{ n: 'Teelicht',   v: { mode: 'flicker', min: 35, max: 85,  speed: 4 } },
-		{ n: 'Kerze (RGB)',v: { mode: 'flicker', min: 25, max: 100, speed: 5 } },
+		{ n: 'Kerze',      v: { mode: 'flicker', min: 25, max: 100, speed: 5 } },
 		{ n: 'Lagerfeuer', v: { mode: 'flicker', min: 10, max: 100, speed: 7 } }
 	];
 
-	PRESETS.forEach(p => {
-		const b = document.createElement('button');
-		b.type = 'button'; b.className = 'chip'; b.textContent = p.n;
-		b.addEventListener('click', () => {
-			touch();
-			const q = [];
-			for (const [k, v] of Object.entries(p.v)) {
-				if (['level', 'min', 'max'].includes(k)) q.push(`${k}=${pc(v)}`);
-				else q.push(`${k}=${v}`);
-			}
-			send('/kerze?' + q.join('&'));
-			showStatus('Preset: ' + p.n);
+	const presetsContainer = $('presets');
+	if (presetsContainer) {
+		PRESETS.forEach(p => {
+			const b = document.createElement('button');
+			b.type = 'button'; b.className = 'chip'; b.textContent = p.n;
+			b.addEventListener('click', () => {
+				touch();
+				const q = [];
+				for (const [k, v] of Object.entries(p.v)) {
+					if (['level', 'min', 'max'].includes(k)) q.push(`${k}=${pc(v)}`);
+					else q.push(`${k}=${v}`);
+				}
+				send('/kerze?' + q.join('&'));
+				showStatus('Preset: ' + p.n);
+			});
+			presetsContainer.appendChild(b);
 		});
-		$('presets').appendChild(b);
-	});
+	}
 
 	$('fade-out').addEventListener('click', () => send('/kerze?mode=fade&to=0&sec=' + $('fade-dur').value));
 	$('fade-in').addEventListener('click', () => send('/kerze?mode=fade&to=255&sec=' + $('fade-dur').value));
-	$('alloff').addEventListener('click', () => {
-		send('/koff');
-		showStatus('Alles ausgeschaltet');
-	});
+	$('save-esp').addEventListener('click', () => { send('/ksave'); showStatus('Stand im ESP gespeichert!'); });
+	$('alloff').addEventListener('click', () => { send('/koff'); showStatus('Alles aus'); });
 
 	render(model);
 	poll();

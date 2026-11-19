@@ -21,6 +21,14 @@
  *    GET /sleep?min=                      → Einschlaf-Timer (0 = aus)
  *    GET /alarm?on=&h=&m=&dur=            → Wecker mit Sonnenaufgang
  *    GET /alloff                          → alles aus
+ *
+ *  Kerze an GPIO5 (PWM 0–255):
+ *    GET /kerze?mode=&level=&min=&max=&speed=&style=&shape=&to=&sec=
+ *        mode = off | steady | flicker | pulse | fade   (alle Parameter optional)
+ *    GET /kstate                          → Zustand der Kerze (JSON)
+ *    GET /ksleep?min=                     → Einschlaf-Timer (sanftes Ausblenden)
+ *    GET /kalarm?on=&h=&m=&dur=           → Wecker (Kerze wird eingeblendet)
+ *    GET /koff                            → Kerze, Timer und Wecker aus
  * ============================================================
  */
 
@@ -170,6 +178,181 @@ String stateJson() {
          ",\"h\":" + alarmCfg.h + ",\"m\":" + alarmCfg.m + ",\"dur\":" + alarmCfg.durMin + "}}";
 }
 
+// ── Kerze an GPIO5 (PWM 0–255) ──────────────────────────────
+#define KERZE_PIN    5
+#define KERZE_FREQ   5000     // PWM-Frequenz in Hz
+#define KERZE_GAMMA  2.0f     // 1.0 = linear; 2.0 = Helligkeit wirkt gleichmäßiger
+
+enum KMode : uint8_t { K_OFF, K_STEADY, K_FLICKER, K_PULSE, K_FADE };
+const char* K_NAMES[] = {"off", "steady", "flicker", "pulse", "fade"};
+
+struct KState {
+  KMode   mode  = K_FLICKER;
+  uint8_t level = 200;   // konstant (0–255)
+  uint8_t mn    = 40;    // dunkel   (0–255)
+  uint8_t mx    = 255;   // hell     (0–255)
+  uint8_t speed = 5;     // 1–10
+  uint8_t style = 1;     // Flackern: 0 ruhig, 1 normal, 2 windig
+  uint8_t shape = 0;     // Hell-Dunkel: 0 weich, 1 hart
+} kst;
+
+struct KAlarm { bool on = false; uint8_t h = 7, m = 0; uint16_t dur = 10; } kAlarm;
+
+float         kOut = 0;                 // aktuelle Helligkeit 0–255 (vor Gamma)
+int           kLastDuty = -1;
+unsigned long kLast = 0, kStart = 0;
+float         kFadeFrom = 0, kFadeTarget = 0;
+unsigned long kFadeStart = 0, kFadeMs = 1;
+unsigned long kSleepEnd = 0;            // 0 = Timer aus
+bool          kDirty = false;
+unsigned long kDirtyAt = 0;
+
+void kWrite(float v) {
+  v = constrain(v, 0.0f, 255.0f);
+  kOut = v;
+  int duty = (int)(powf(v / 255.0f, KERZE_GAMMA) * 255.0f + 0.5f);
+  if (duty != kLastDuty) { kLastDuty = duty; ledcWrite(KERZE_PIN, duty); }
+}
+
+void kMark() { kDirty = true; kDirtyAt = millis(); }
+
+void kSetMode(uint8_t m) { kst.mode = (KMode)m; kStart = millis(); kLast = 0; kMark(); }
+
+void kFade(float to, unsigned long ms) {
+  kFadeFrom = kOut; kFadeTarget = to; kFadeStart = millis();
+  kFadeMs = ms < 1 ? 1 : ms;
+  kst.mode = K_FADE; kMark();
+}
+
+void kSave() {
+  prefs.begin("kerze", false);
+  prefs.putUChar("mode", kst.mode);  prefs.putUChar("level", kst.level);
+  prefs.putUChar("mn", kst.mn);      prefs.putUChar("mx", kst.mx);
+  prefs.putUChar("speed", kst.speed); prefs.putUChar("style", kst.style);
+  prefs.putUChar("shape", kst.shape);
+  prefs.end();
+}
+
+void kLoad() {
+  prefs.begin("kerze", false);
+  kst.mode  = (KMode)prefs.getUChar("mode", K_FLICKER);
+  kst.level = prefs.getUChar("level", 200);
+  kst.mn    = prefs.getUChar("mn", 40);
+  kst.mx    = prefs.getUChar("mx", 255);
+  kst.speed = prefs.getUChar("speed", 5);
+  kst.style = prefs.getUChar("style", 1);
+  kst.shape = prefs.getUChar("shape", 0);
+  prefs.end();
+  if (kst.mode > K_FADE) kst.mode = K_FLICKER;
+  if (kst.mode == K_FADE) kst.mode = K_STEADY;     // Überblendung nicht über Neustart hinaus
+  kOut = kst.level;
+  kStart = millis();
+}
+
+int qInt(AsyncWebServerRequest* req, const char* key, int lo, int hi, int def) {
+  if (!req->hasParam(key)) return def;
+  return constrain(req->getParam(key)->value().toInt(), lo, hi);
+}
+
+String kJson() {
+  long sl = kSleepEnd ? (long)(kSleepEnd - millis()) / 1000 : 0;
+  if (sl < 0) sl = 0;
+  return String("{\"mode\":\"") + K_NAMES[kst.mode] + "\",\"level\":" + kst.level +
+         ",\"min\":" + kst.mn + ",\"max\":" + kst.mx + ",\"speed\":" + kst.speed +
+         ",\"style\":" + kst.style + ",\"shape\":" + kst.shape +
+         ",\"out\":" + (int)kOut + ",\"fadeTo\":" + (int)kFadeTarget + ",\"sleepLeft\":" + sl +
+         ",\"alarm\":{\"on\":" + (kAlarm.on ? "true" : "false") +
+         ",\"h\":" + kAlarm.h + ",\"m\":" + kAlarm.m + ",\"dur\":" + kAlarm.dur + "}}";
+}
+
+void kerzeLoop(unsigned long now) {
+  float sp = kst.speed / 5.0f;
+
+  // ── Einschlaf-Timer: am Ende 15 s sanft ausblenden ──
+  if (kSleepEnd && (long)(now - kSleepEnd) >= 0) {
+    kSleepEnd = 0;
+    kFade(0, 15000);
+  }
+
+  // ── Wecker: Kerze wird bis zur Weckzeit auf "hell" eingeblendet ──
+  static unsigned long lastAlarm = 0;
+  if (kAlarm.on && now - lastAlarm >= 1000) {
+    lastAlarm = now;
+    struct tm t;
+    if (getLocalTime(&t, 0)) {
+      long nowS   = t.tm_hour * 3600L + t.tm_min * 60L + t.tm_sec;
+      long startS = kAlarm.h * 3600L + kAlarm.m * 60L - kAlarm.dur * 60L;
+      long diff   = (nowS - startS + 86400L) % 86400L;       // Sekunden seit Start des Einblendens
+      if (diff < kAlarm.dur * 60L) {
+        kFadeFrom   = 0;
+        kFadeTarget = kst.mx ? kst.mx : 255;
+        kFadeMs     = kAlarm.dur * 60000UL;
+        kFadeStart  = now - diff * 1000UL;
+        kst.mode    = K_FADE;
+        kAlarm.on   = false;                                 // einmalig
+        kMark();
+      }
+    }
+  }
+
+  switch (kst.mode) {
+    case K_OFF:
+      kWrite(0);
+      break;
+
+    case K_STEADY:
+      kWrite(kst.level);
+      break;
+
+    case K_FLICKER: {
+      static const float    BMIN[3] = {0.55, 0.30, 0.08};
+      static const float    SMTH[3] = {0.22, 0.34, 0.52};
+      static const uint16_t STEP[3] = {110, 85, 65};
+      static const uint8_t  GUST[3] = {2, 6, 14};            // % Chance auf Zugluft
+      static float b = 0.7, tb = 0.7;
+      uint8_t l = kst.style > 2 ? 1 : kst.style;
+      if (now - kLast >= STEP[l] / sp) {
+        kLast = now;
+        if (random(100) < GUST[l]) {                         // Böe: tief einknicken
+          tb = BMIN[l] + random(0, 20) / 100.0f;
+        } else if (random(100) < 35) {                       // normales Züngeln
+          float lo = BMIN[l] + 0.12f;
+          tb = lo + (random(0, 100) / 100.0f) * (1.0f - lo);
+        }
+        b += (tb - b) * SMTH[l];
+        kWrite(kst.mn + constrain(b, 0.0f, 1.0f) * (kst.mx - kst.mn));
+      }
+      break;
+    }
+
+    case K_PULSE: {                                           // Hell-Dunkel abwechselnd
+      unsigned long period = (unsigned long)((kst.shape ? 3000.0f : 6000.0f) / sp);
+      if (period < 200) period = 200;
+      float ph  = (float)((now - kStart) % period) / (float)period;
+      float lum = kst.shape ? (ph < 0.5f ? 1.0f : 0.0f)       // hart: an/aus
+                            : (0.5f - 0.5f * cosf(6.2831853f * ph));  // weich: Sinus
+      kWrite(kst.mn + lum * (kst.mx - kst.mn));
+      break;
+    }
+
+    case K_FADE: {
+      float p = (float)(now - kFadeStart) / (float)kFadeMs;
+      if (p >= 1.0f) {
+        kWrite(kFadeTarget);
+        kst.level = (uint8_t)kFadeTarget;
+        kst.mode  = kFadeTarget > 0 ? K_STEADY : K_OFF;
+        kMark();
+      } else {
+        kWrite(kFadeFrom + (kFadeTarget - kFadeFrom) * (p < 0 ? 0 : p));
+      }
+      break;
+    }
+  }
+
+  // Zustand verzögert in den Flash schreiben (schont den Speicher)
+  if (kDirty && now - kDirtyAt > 2000) { kDirty = false; kSave(); }
+}
+
 // ── Shell-HTML (Lädt das Interface von GitHub) ──────────────
 // Wichtig: innerHTML führt <script>-Tags NICHT aus.
 // Lösung: DOMParser + manuelles Script-Einfügen nach dem Laden.
@@ -240,7 +423,11 @@ void setup() {
     }
   }
 
- // ── WLAN verbinden ───────────────────────────────────────
+ // ── Kerze (GPIO5): PWM erst NACH pinMode() anbinden, sonst wird es wieder gelöst
+  ledcAttach(KERZE_PIN, KERZE_FREQ, 8);   // PWM 0–255 an GPIO5
+  kLoad();                                // letzte Kerzen-Einstellung laden
+
+  // ── WLAN verbinden ───────────────────────────────────────
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   Serial.printf("\nVerbinde mit '%s'", ssid);
@@ -420,6 +607,52 @@ void setup() {
     sendOK(req, stateJson());
   });
 
+  // ── Kerze (GPIO5) ───────────────────────────────────────
+  server.on("/kstate", HTTP_GET, [](AsyncWebServerRequest* req) { sendOK(req, kJson()); });
+
+  // /kerze?mode=flicker&min=60&max=255&speed=5&style=1&shape=0&level=200
+  // /kerze?mode=fade&to=0&sec=30     → sanft ein-/ausblenden
+  server.on("/kerze", HTTP_GET, [](AsyncWebServerRequest* req) {
+    kst.level = qInt(req, "level", 0, 255, kst.level);
+    kst.mn    = qInt(req, "min",   0, 255, kst.mn);
+    kst.mx    = qInt(req, "max",   0, 255, kst.mx);
+    kst.speed = qInt(req, "speed", 1, 10,  kst.speed);
+    kst.style = qInt(req, "style", 0, 2,   kst.style);
+    kst.shape = qInt(req, "shape", 0, 1,   kst.shape);
+    if (kst.mn > kst.mx) kst.mn = kst.mx;
+    if (req->hasParam("mode")) {
+      String n = req->getParam("mode")->value();
+      int m = -1;
+      for (int i = 0; i <= K_FADE; i++) if (n == K_NAMES[i]) m = i;
+      if (m < 0) return sendErr(req, 400, "Unbekannte Betriebsart");
+      if (m == K_FADE) kFade(qInt(req, "to", 0, 255, 0), qInt(req, "sec", 1, 3600, 10) * 1000UL);
+      else             kSetMode(m);
+    }
+    kMark();
+    sendOK(req, kJson());
+  });
+
+  server.on("/ksleep", HTTP_GET, [](AsyncWebServerRequest* req) {
+    int min = qInt(req, "min", 0, 1440, 0);
+    kSleepEnd = (min > 0) ? millis() + (unsigned long)min * 60000UL : 0;
+    sendOK(req, kJson());
+  });
+
+  server.on("/kalarm", HTTP_GET, [](AsyncWebServerRequest* req) {
+    kAlarm.on  = req->hasParam("on") && req->getParam("on")->value() == "1";
+    kAlarm.h   = qInt(req, "h",   0, 23,  kAlarm.h);
+    kAlarm.m   = qInt(req, "m",   0, 59,  kAlarm.m);
+    kAlarm.dur = qInt(req, "dur", 1, 120, kAlarm.dur);
+    sendOK(req, kJson());
+  });
+
+  server.on("/koff", HTTP_GET, [](AsyncWebServerRequest* req) {
+    kSleepEnd = 0;
+    kAlarm.on = false;
+    kSetMode(K_OFF);
+    sendOK(req, kJson());
+  });
+
   server.begin();
   Serial.println("\n✓ Webserver läuft auf Port 80");
   Serial.println("══════════════════════════════***\n");
@@ -541,6 +774,8 @@ void loop() {
 
     default: break;
   }
+
+  kerzeLoop(now);                       // Kerze an GPIO5
 
   // ── Zustand verzögert in den Flash schreiben ──
   if (dirty && now - dirtyAt > 2000) {

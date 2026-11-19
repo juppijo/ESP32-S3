@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#1b1620">
-<title>WRZT · Kerze & RGB</title>
+<title>WRZT · Kerze</title>
 <style>
 	:root{
 		--bg:#1b1620; --sheet:#251d2b; --sheet2:#2e2436; --line:#41344b;
@@ -23,6 +23,7 @@
 		background:var(--bg);
 	}
 
+	/* Das Licht der Kerze fällt über die ganze Seite */
 	.ambient{
 		position:fixed; inset:0; pointer-events:none; z-index:0;
 		background:
@@ -50,6 +51,7 @@
 	#conn.online{background:rgba(127,209,139,.12); color:var(--ok); border-color:rgba(127,209,139,.45);}
 	#conn.offline{background:rgba(255,123,107,.12); color:var(--err); border-color:rgba(255,123,107,.45);}
 
+	/* ───── Kerze ───── */
 	.hero{display:grid; grid-template-columns:150px 1fr; gap:14px; align-items:center;}
 	.candle{position:relative; width:150px; height:214px;}
 	.glow{
@@ -77,8 +79,8 @@
 
 	.readout .big{font:600 2.3rem/1 var(--serif); letter-spacing:-.01em; font-variant-numeric:tabular-nums;}
 	.readout .sub{color:var(--mute); margin:6px 0 14px; min-height:2.6em; font-size:.92rem;}
-	.hero-btns{display:flex; flex-direction:column; gap:8px; align-items:flex-start;}
 
+	/* ───── Bedienelemente ───── */
 	button{font:inherit; color:inherit; cursor:pointer;}
 	:focus-visible{outline:2px solid var(--flame); outline-offset:2px;}
 	.btn{
@@ -89,8 +91,6 @@
 	.btn:active{transform:translateY(1px);}
 	.btn.primary{background:linear-gradient(135deg,#f3a52b,#e4621a); border-color:#ffc56b; color:#2a1405;}
 	.btn.primary:hover{background:linear-gradient(135deg,#ffbd4a,#f27a2f);}
-	.btn.save{background:#234632; border-color:#52a873; color:#d8f8e2;}
-	.btn.save:hover{background:#2d5940; border-color:#7fd18b;}
 	.btn.danger{background:#6d2430; border-color:#c4505f; color:#fff;}
 	.btn.danger:hover{background:#8b2d3c;}
 	.btn.on{border-color:var(--flame); box-shadow:0 0 0 2px rgba(255,178,62,.35); color:var(--flame);}
@@ -160,7 +160,7 @@
 
 <main class="sheet" id="sheet">
 	<header class="top">
-		<h1>Kerze & RGB</h1>
+		<h1>Kerze</h1>
 		<span id="conn">● Prüfe …</span>
 	</header>
 
@@ -196,10 +196,7 @@
 		<div class="readout">
 			<div class="big" id="big">–</div>
 			<div class="sub" id="sub">verbinde …</div>
-			<div class="hero-btns">
-				<button class="btn save" id="save-esp" type="button">💾 Stand im ESP speichern</button>
-				<button class="btn danger" id="alloff" type="button">⏻ Alles aus</button>
-			</div>
+			<button class="btn danger" id="alloff" type="button">⏻ Alles aus</button>
 		</div>
 	</section>
 
@@ -209,7 +206,7 @@
 	</section>
 
 	<section>
-		<h2>Betriebsart & RGB-Kerze</h2>
+		<h2>Betriebsart</h2>
 		<div class="seg" id="seg-mode" role="radiogroup" aria-label="Betriebsart">
 			<button type="button" role="radio" aria-checked="false" data-mode="steady">Konstant</button>
 			<button type="button" role="radio" aria-checked="false" data-mode="flicker">Flackern</button>
@@ -269,7 +266,7 @@
 			<button class="btn" id="fade-in" type="button">🌅 Einblenden</button>
 			<button class="btn" id="fade-out" type="button">🌙 Ausblenden</button>
 		</div>
-		<p class="note">Einblenden endet bei der eingestellten Helligkeit.</p>
+		<p class="note">Einblenden endet bei der eingestellten Helligkeit „Hell“ (bzw. „Konstant“).</p>
 	</section>
 
 	<section>
@@ -284,6 +281,7 @@
 			</select>
 			<span id="sleep-left"></span>
 		</div>
+		<p class="note">Am Ende blendet die Kerze 15 Sekunden lang sanft aus.</p>
 	</section>
 
 	<section>
@@ -304,12 +302,21 @@
 		</div>
 		<button class="btn" id="alarm-btn" type="button">⏰ Wecker stellen</button>
 		<p class="note" id="alarm-info"></p>
+		<p class="note">Timer, Wecker, Flackern und Hell-Dunkel laufen im ESP32. Die Seite darf geschlossen werden.</p>
+	</section>
+
+	<section>
+		<h2>Anzeige</h2>
+		<div class="row tight">
+			<button class="btn primary" id="full-btn" type="button">⛶ Vollbild</button>
+			<label class="note" style="margin:0"><input type="checkbox" id="wake"> Bildschirm wach halten</label>
+		</div>
 	</section>
 
 	<details id="conn-details">
-		<summary>Verbindung & IP</summary>
+		<summary>Verbindung</summary>
 		<div class="row" style="margin-top:12px">
-			<input type="text" id="ip" placeholder="http://192.168.x.x" autocomplete="off" spellcheck="false" aria-label="ESP32 IP">
+			<input type="text" id="ip" placeholder="http://192.168.129.48" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Adresse des ESP32">
 			<button class="btn" id="ip-save" type="button">Speichern</button>
 			<button class="btn" id="ip-test" type="button">Testen</button>
 		</div>
@@ -317,12 +324,13 @@
 	</details>
 
 	<div id="status" role="status"></div>
-	<footer>ESP32-S3 · Kerze & RGB</footer>
+	<footer>ESP32-S3 · Kerze an GPIO5 · PWM 0–255</footer>
 </main>
 
 <script>
 	const $ = id => document.getElementById(id);
 
+	// ───────── Verbindung (wie in RBG4) ─────────
 	let savedIp = '';
 	try { savedIp = localStorage.getItem('esp32ip') || ''; } catch {}
 
@@ -342,21 +350,46 @@
 		return served ? location.origin : 'http://esp32gpio.local';
 	}
 
-	// Einfacher, robuster Fetch ohne CORS-Erzwingung, die den ESP blockieren kann
-	async function call(path) {
-		const url = getBase() + path;
+	async function call(path, timeoutMs) {
+		const base = getBase();
+		const same = base === location.origin;
+		const ctrl = new AbortController();
+		const t = timeoutMs ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
 		try {
-			await fetch(url, { mode: 'no-cors' });
-		} catch (e) {
-			console.warn('Call error:', e);
-		}
+			const r = await fetch(base + path, { mode: same ? 'cors' : 'no-cors', signal: ctrl.signal });
+			if (same && !r.ok) throw new Error('HTTP ' + r.status);
+		} finally { if (t) clearTimeout(t); }
 	}
 
-	async function getState() {
-		const url = getBase() + '/kstate';
-		const r = await fetch(url, { cache: 'no-store' });
-		if (!r.ok) throw new Error('HTTP ' + r.status);
-		return await r.json();
+	async function getState(timeoutMs = 2500) {
+		const ctrl = new AbortController();
+		const t = setTimeout(() => ctrl.abort(), timeoutMs);
+		try {
+			const r = await fetch(getBase() + '/kstate', { mode: 'cors', signal: ctrl.signal, cache: 'no-store' });
+			if (!r.ok) throw new Error('HTTP ' + r.status);
+			return await r.json();
+		} finally { clearTimeout(t); }
+	}
+
+	function friendlyError(e) {
+		if (location.protocol === 'https:' && getBase().startsWith('http:'))
+			return 'Seite per https geöffnet – der ESP32 (http) wird vom Browser blockiert. Seite per http oder lokal öffnen.';
+		if (e && e.message === 'HTTP 404') return 'ESP32 kennt /kstate nicht – bitte die neue GPIO2.ino (mit Kerze) hochladen.';
+		if (e && /^HTTP/.test(e.message)) return 'ESP32 meldet ' + e.message;
+		return 'ESP32 unter ' + getBase() + ' nicht erreichbar – gleiches WLAN? Adresse richtig?';
+	}
+
+	function updateHint() {
+		const h = $('hint');
+		h.textContent = 'Verwendet: ' + getBase() + (savedIp ? '' : '  (keine Adresse gespeichert)');
+		if (location.protocol === 'https:' && getBase().startsWith('http:')) {
+			h.appendChild(document.createElement('br'));
+			const a = document.createElement('a');
+			a.href = location.href.replace(/^https:/, 'http:');
+			a.textContent = '⚠ Seite ist per https geöffnet – hier per http öffnen';
+			a.style.color = '#ffb23e';
+			h.appendChild(a);
+		}
 	}
 
 	function showStatus(text, ok = true) {
@@ -377,38 +410,41 @@
 		try { savedIp ? localStorage.setItem('esp32ip', savedIp) : localStorage.removeItem('esp32ip'); } catch {}
 		updateHint();
 		showStatus(savedIp ? 'Adresse gespeichert: ' + savedIp : 'Adresse gelöscht');
-		poll();
+		firstSync = true; poll();
 	});
 
 	$('ip-test').addEventListener('click', async () => {
-		showStatus('Teste Verbindung …');
-		try {
-			await getState();
-			setOnline(true);
-			showStatus('ESP32 erreichbar!');
-		} catch (e) {
-			setOnline(false);
-			showStatus('Nicht erreichbar (IP prüfen)', false);
-		}
+		showStatus('Teste ' + getBase() + ' …');
+		try { await getState(4000); setOnline(true); showStatus('ESP32 antwortet unter ' + getBase()); }
+		catch (e) { setOnline(false); showStatus(friendlyError(e), false); }
 	});
 
 	$('ip').value = savedIp;
-	function updateHint() {
-		$('hint').textContent = 'Aktive Basis-URL: ' + getBase();
-	}
 	updateHint();
 
-	// Sofortiger Direktversand ohne verzögertes Queuing
-	function send(path) {
-		call(path);
+	// ───────── Senden (immer nur der neueste Befehl, kein Stau) ─────────
+	let sending = false, pendingPath = null;
+
+	async function pump() {
+		if (sending) return;
+		sending = true;
+		while (pendingPath) {
+			const path = pendingPath; pendingPath = null;
+			try { await call(path, 4000); setOnline(true); }
+			catch (e) { setOnline(false); showStatus(friendlyError(e), false); }
+		}
+		sending = false;
 	}
+	function send(path) { pendingPath = path; pump(); }
 
+	// ───────── Zustand & Anzeige ─────────
 	const MODES = ['steady', 'flicker', 'pulse'];
-	const pct = v => Math.round(v / 2.55);
-	const pc  = v => Math.round(v * 2.55);
+	const pct = v => Math.round(v / 2.55);          // 0–255 → %
+	const pc  = v => Math.round(v * 2.55);          // % → 0–255
+	const comma = n => n.toFixed(1).replace('.', ',');
 
-	let model = { mode: 'init', level: 204, min: 38, max: 255, speed: 5, style: 1, shape: 0, out: 0 };
-	let uiMode = 'flicker', lastTouch = 0;
+	let model = { mode: 'init', level: 204, min: 38, max: 255, speed: 5, style: 1, shape: 0, out: 0, fadeTo: 0, sleepLeft: 0, alarm: { on: false } };
+	let uiMode = 'flicker', lastTouch = 0, firstSync = true;
 	try { uiMode = localStorage.getItem('kerze-ui') || 'flicker'; } catch {}
 	const touch = () => { lastTouch = Date.now(); };
 
@@ -422,16 +458,27 @@
 
 	function setChecked(btn, on) { btn.setAttribute('aria-checked', on ? 'true' : 'false'); }
 
+	function cycleSec(s) { return (s.shape ? 3 : 6) / (s.speed / 5); }
+
 	function readout(s) {
 		const big = $('big'), sub = $('sub'), hint = $('mode-hint');
 		const range = `${pct(s.min)}–${pct(s.max)} %`;
-		if (hint) hint.textContent = '';
+		hint.textContent = '';
 		switch (s.mode) {
-			case 'off': big.textContent = 'Aus'; sub.textContent = 'Ausgeschaltet.'; break;
-			case 'steady': big.textContent = pct(s.level) + ' %'; sub.textContent = 'Konstant'; break;
-			case 'flicker': big.textContent = range; sub.textContent = 'Flackern aktiv'; break;
-			case 'pulse': big.textContent = range; sub.textContent = 'Pulsieren aktiv'; break;
-			case 'fade': big.textContent = pct(s.out) + ' %'; sub.textContent = 'Blende...'; break;
+			case 'off':
+				big.textContent = 'Aus'; sub.textContent = 'Die Kerze ist ausgeschaltet.'; break;
+			case 'steady':
+				big.textContent = pct(s.level) + ' %'; sub.textContent = 'leuchtet konstant'; break;
+			case 'flicker':
+				big.textContent = range; sub.textContent = 'flackert · ' + ['ruhig', 'normal', 'windig'][s.style];
+				hint.textContent = 'Die Flamme schwankt zufällig zwischen Dunkel und Hell. „Windig“ knickt öfter tief ein.'; break;
+			case 'pulse':
+				big.textContent = range;
+				sub.textContent = (s.shape ? 'blinkt hart' : 'wechselt weich') + ' · Takt ' + comma(cycleSec(s)) + ' s';
+				hint.textContent = s.shape ? 'Hell und dunkel wechseln abrupt, je halber Takt.' : 'Die Helligkeit gleitet sanft zwischen Dunkel und Hell hin und her.'; break;
+			case 'fade':
+				big.textContent = pct(s.out) + ' %';
+				sub.textContent = s.fadeTo > s.out ? 'blendet ein …' : 'blendet aus …'; break;
 		}
 	}
 
@@ -443,10 +490,8 @@
 
 	function setSlider(id, val, fmt) {
 		const el = $(id);
-		if (!el) return;
 		el.value = val; fill(el);
-		const out = $('v-' + id.slice(2));
-		if (out) out.textContent = fmt ? fmt(val) : val + ' %';
+		$('v-' + id.slice(2)).textContent = fmt ? fmt(val) : val + ' %';
 	}
 
 	function render(s) {
@@ -456,88 +501,261 @@
 		setSlider('s-min', pct(s.min));
 		setSlider('s-max', pct(s.max));
 		setSlider('s-speed', s.speed, v => v);
+		document.querySelectorAll('#seg-style button').forEach(b => setChecked(b, +b.dataset.v === s.style));
+		document.querySelectorAll('#seg-shape button').forEach(b => setChecked(b, +b.dataset.v === s.shape));
 		applyGroups();
 		readout(s);
 	}
 
-	function applyState(s) {
+	function applyState(s, force) {
 		model = s;
 		setGlow(s.out / 255);
-		if (Date.now() - lastTouch < 2500) return;
-		render(s);
-	}
-
-	// Stabile Polling-Schleife ohne Endlos-Fehlerblockaden
-	async function poll() {
-		if (document.visibilityState === 'visible') {
-			try {
-				const s = await getState();
-				setOnline(true);
-				applyState(s);
-			} catch (e) {
-				setOnline(false);
-			}
+		if (!force && Date.now() - lastTouch < 2500) {     // Nutzer bedient gerade: Regler nicht überschreiben
+			if (s.mode === 'fade') readout(s);
+			return;
 		}
-		setTimeout(poll, 1500);
+		render(s);
+		updateSleep(s);
+		updateAlarm(s);
 	}
 
+	// ───────── Abfrage-Schleife ─────────
+	let pollTimer = null, helpShown = false;
+
+	async function poll() {
+		clearTimeout(pollTimer);
+		if (document.visibilityState !== 'visible') return;
+		let delay = 600;
+		try {
+			const s = await getState();
+			setOnline(true);
+			applyState(s, firstSync);
+			firstSync = false;
+		} catch (e) {
+			setOnline(false);
+			delay = 3000;
+			if (!helpShown) { helpShown = true; $('conn-details').open = true; showStatus(friendlyError(e), false); }
+		}
+		pollTimer = setTimeout(poll, delay);
+	}
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'visible') { firstSync = true; poll(); }
+	});
+
+	// ───────── Betriebsart & Regler ─────────
 	document.querySelectorAll('#seg-mode button').forEach(b => b.addEventListener('click', () => {
 		touch();
 		const m = b.dataset.mode;
 		model = { ...model, mode: m };
 		render(model);
 		send('/kerze?mode=' + m);
+		showStatus('Betriebsart: ' + b.textContent);
 	}));
 
 	function bindSlider(id, fmt, path) {
 		const el = $(id);
-		if (!el) return;
 		fill(el);
 		el.addEventListener('input', () => {
 			touch(); fill(el);
 			const v = +el.value;
-			const out = $('v-' + id.slice(2));
-			if (out) out.textContent = fmt ? fmt(v) : v + ' %';
+			$('v-' + id.slice(2)).textContent = fmt ? fmt(v) : v + ' %';
 			path(v);
+			readout({ ...model, ...localModel() });
 		});
+	}
+
+	function localModel() {
+		return { level: pc(+$('s-level').value), min: pc(+$('s-min').value), max: pc(+$('s-max').value), speed: +$('s-speed').value };
 	}
 
 	bindSlider('s-level', null, v => send('/kerze?level=' + pc(v)));
-	bindSlider('s-min', null, v => send(`/kerze?min=${pc(v)}&max=${pc(+$('s-max').value)}`));
-	bindSlider('s-max', null, v => send(`/kerze?min=${pc(+$('s-min').value)}&max=${pc(v)}`));
+	bindSlider('s-min', null, v => {
+		if (v > +$('s-max').value) { $('s-max').value = v; fill($('s-max')); $('v-max').textContent = v + ' %'; }
+		send(`/kerze?min=${pc(v)}&max=${pc(+$('s-max').value)}`);
+	});
+	bindSlider('s-max', null, v => {
+		if (v < +$('s-min').value) { $('s-min').value = v; fill($('s-min')); $('v-min').textContent = v + ' %'; }
+		send(`/kerze?min=${pc(+$('s-min').value)}&max=${pc(v)}`);
+	});
 	bindSlider('s-speed', v => v, v => send('/kerze?speed=' + v));
 
+	function bindSeg(id, key) {
+		document.querySelectorAll(`#${id} button`).forEach(b => b.addEventListener('click', () => {
+			touch();
+			model = { ...model, [key]: +b.dataset.v };
+			document.querySelectorAll(`#${id} button`).forEach(x => setChecked(x, x === b));
+			readout(model);
+			send(`/kerze?${key}=${b.dataset.v}`);
+		}));
+	}
+	bindSeg('seg-style', 'style');
+	bindSeg('seg-shape', 'shape');
+
+	// ───────── Schnellwahl ─────────
 	const PRESETS = [
 		{ n: 'Nachtlicht', v: { mode: 'steady', level: 10 } },
-		{ n: 'Teelicht',   v: { mode: 'flicker', min: 35, max: 85,  speed: 4 } },
-		{ n: 'Kerze',      v: { mode: 'flicker', min: 25, max: 100, speed: 5 } },
-		{ n: 'Lagerfeuer', v: { mode: 'flicker', min: 10, max: 100, speed: 7 } }
+		{ n: 'Teelicht',   v: { mode: 'flicker', min: 35, max: 85,  speed: 4, style: 0 } },
+		{ n: 'Kerze',      v: { mode: 'flicker', min: 25, max: 100, speed: 5, style: 1 } },
+		{ n: 'Lagerfeuer', v: { mode: 'flicker', min: 10, max: 100, speed: 7, style: 2 } },
+		{ n: 'Atmen',      v: { mode: 'pulse',   min: 5,  max: 100, speed: 3, shape: 0 } },
+		{ n: 'Blinken',    v: { mode: 'pulse',   min: 0,  max: 100, speed: 8, shape: 1 } }
 	];
 
-	const presetsContainer = $('presets');
-	if (presetsContainer) {
-		PRESETS.forEach(p => {
-			const b = document.createElement('button');
-			b.type = 'button'; b.className = 'chip'; b.textContent = p.n;
-			b.addEventListener('click', () => {
-				touch();
-				const q = [];
-				for (const [k, v] of Object.entries(p.v)) {
-					if (['level', 'min', 'max'].includes(k)) q.push(`${k}=${pc(v)}`);
-					else q.push(`${k}=${v}`);
-				}
-				send('/kerze?' + q.join('&'));
-				showStatus('Preset: ' + p.n);
-			});
-			presetsContainer.appendChild(b);
+	PRESETS.forEach(p => {
+		const b = document.createElement('button');
+		b.type = 'button'; b.className = 'chip'; b.textContent = p.n;
+		b.addEventListener('click', () => {
+			touch();
+			const q = [], m = { ...model };
+			for (const [k, v] of Object.entries(p.v)) {
+				if (k === 'mode') { q.push('mode=' + v); m.mode = v; }
+				else if (['level', 'min', 'max'].includes(k)) { q.push(`${k}=${pc(v)}`); m[k] = pc(v); }
+				else { q.push(`${k}=${v}`); m[k] = v; }
+			}
+			model = m; render(m);
+			send('/kerze?' + q.join('&'));
+			showStatus('Schnellwahl: ' + p.n);
 		});
+		$('presets').appendChild(b);
+	});
+
+	// ───────── Sanft ein-/ausblenden ─────────
+	function fadeTo(target, label) {
+		touch();
+		const sec = +$('fade-dur').value;
+		send(`/kerze?mode=fade&to=${target}&sec=${sec}`);
+		model = { ...model, mode: 'fade', fadeTo: target };
+		render(model);
+		showStatus(`${label} in ${$('fade-dur').selectedOptions[0].textContent}`);
+	}
+	$('fade-out').addEventListener('click', () => fadeTo(0, 'Ausblenden'));
+	$('fade-in').addEventListener('click', () => {
+		const target = uiMode === 'steady' ? model.level : (model.max || 255);
+		fadeTo(target || 255, 'Einblenden');
+	});
+
+	// ───────── Einschlaf-Timer (läuft im ESP32) ─────────
+	let sleepEnd = 0, sleepTimer = null;
+
+	function tickSleep() {
+		const left = Math.max(0, sleepEnd - Date.now());
+		const m = Math.floor(left / 60000), s = Math.floor(left % 60000 / 1000);
+		$('sleep-left').textContent = left > 0 ? `aus in ${m}:${String(s).padStart(2, '0')}` : '';
+		if (left <= 0) { clearInterval(sleepTimer); sleepTimer = null; }
 	}
 
-	$('fade-out').addEventListener('click', () => send('/kerze?mode=fade&to=0&sec=' + $('fade-dur').value));
-	$('fade-in').addEventListener('click', () => send('/kerze?mode=fade&to=255&sec=' + $('fade-dur').value));
-	$('save-esp').addEventListener('click', () => { send('/ksave'); showStatus('Stand im ESP gespeichert!'); });
-	$('alloff').addEventListener('click', () => { send('/koff'); showStatus('Alles aus'); });
+	$('sleep-sel').addEventListener('change', e => {
+		touch();
+		const min = +e.target.value;
+		send('/ksleep?min=' + (min || 0));
+		clearInterval(sleepTimer); sleepTimer = null;
+		$('sleep-left').textContent = '';
+		if (!min) { showStatus('Timer aus'); return; }
+		sleepEnd = Date.now() + min * 60000;
+		sleepTimer = setInterval(tickSleep, 1000); tickSleep();
+		showStatus(`Kerze blendet in ${min} Minuten aus`);
+	});
 
+	function updateSleep(s) {
+		const sel = $('sleep-sel');
+		let run = sel.querySelector('option[value="run"]');
+		if (s.sleepLeft > 0) {
+			if (!run) { run = new Option('läuft …', 'run'); sel.add(run); }
+			sel.value = 'run';
+			sleepEnd = Date.now() + s.sleepLeft * 1000;
+			if (!sleepTimer) sleepTimer = setInterval(tickSleep, 1000);
+			tickSleep();
+		} else {
+			if (run) run.remove();
+			if (sel.value === 'run') sel.value = '0';
+			if (!sel.value || sel.value === '0') { clearInterval(sleepTimer); sleepTimer = null; $('sleep-left').textContent = ''; }
+		}
+	}
+
+	// ───────── Wecker (läuft im ESP32) ─────────
+	let alarmOn = false;
+	const p2 = n => String(n).padStart(2, '0');
+
+	function setAlarmUi(on, label, dur) {
+		alarmOn = on;
+		$('alarm-btn').classList.toggle('on', on);
+		$('alarm-btn').textContent = on ? '⏰ Wecker aus' : '⏰ Wecker stellen';
+		$('alarm-info').textContent = on ? `Wecker ${label} aktiv · Kerze wird ${dur} Min. vorher eingeblendet` : '';
+	}
+
+	function updateAlarm(s) {
+		if (s.alarm && s.alarm.on) {
+			$('alarm-time').value = `${p2(s.alarm.h)}:${p2(s.alarm.m)}`;
+			$('alarm-dur').value = String(s.alarm.dur);
+			setAlarmUi(true, `${p2(s.alarm.h)}:${p2(s.alarm.m)}`, s.alarm.dur);
+		} else setAlarmUi(false);
+	}
+
+	$('alarm-btn').addEventListener('click', () => {
+		touch();
+		if (alarmOn) { send('/kalarm?on=0'); setAlarmUi(false); showStatus('Wecker aus'); return; }
+		const v = $('alarm-time').value;
+		if (!v) { showStatus('Bitte eine Weckzeit wählen', false); return; }
+		const [h, m] = v.split(':').map(Number);
+		const dur = $('alarm-dur').value;
+		send(`/kalarm?on=1&h=${h}&m=${m}&dur=${dur}`);
+		setAlarmUi(true, v, dur);
+		showStatus('Wecker gestellt auf ' + v + ' (Uhrzeit des ESP32 per NTP)');
+	});
+
+	// ───────── Alles aus ─────────
+	$('alloff').addEventListener('click', () => {
+		touch();
+		model = { ...model, mode: 'off', out: 0 };
+		render(model); setGlow(0);
+		clearInterval(sleepTimer); sleepTimer = null;
+		$('sleep-sel').value = '0'; $('sleep-left').textContent = '';
+		setAlarmUi(false);
+		send('/koff');
+		showStatus('Alles aus: Kerze, Timer und Wecker beendet');
+	});
+
+	// ───────── Bildschirm wach halten ─────────
+	let wakeLock = null;
+	async function setWake(want) {
+		try {
+			if (want) {
+				if (!navigator.wakeLock) throw new Error('vom Browser hier nicht unterstützt (braucht https oder lokal)');
+				wakeLock = await navigator.wakeLock.request('screen');
+				wakeLock.addEventListener('release', () => { wakeLock = null; });
+			} else if (wakeLock) { await wakeLock.release(); wakeLock = null; }
+			$('wake').checked = !!want;
+		} catch (e) {
+			$('wake').checked = false;
+			showStatus('Bildschirm wach halten nicht möglich: ' + e.message, false);
+		}
+	}
+	$('wake').addEventListener('change', e => setWake(e.target.checked));
+	document.addEventListener('visibilitychange', () => {
+		if (document.visibilityState === 'visible' && $('wake').checked && !wakeLock) setWake(true);
+	});
+
+	// ───────── Vollbild ─────────
+	const fullBtn = $('full-btn');
+	const root = document.documentElement;
+	if (!(root.requestFullscreen || root.webkitRequestFullscreen)) fullBtn.style.display = 'none';
+
+	fullBtn.addEventListener('click', () => {
+		const active = document.fullscreenElement || document.webkitFullscreenElement;
+		if (!active) {
+			const p = (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+			if (p && p.catch) p.catch(e => showStatus('Vollbild nicht möglich: ' + e.message, false));
+		} else {
+			(document.exitFullscreen || document.webkitExitFullscreen).call(document);
+		}
+	});
+	function updateFullBtn() {
+		fullBtn.textContent = (document.fullscreenElement || document.webkitFullscreenElement) ? '✕ Vollbild beenden' : '⛶ Vollbild';
+	}
+	document.addEventListener('fullscreenchange', updateFullBtn);
+	document.addEventListener('webkitfullscreenchange', updateFullBtn);
+
+	// ───────── Start ─────────
 	render(model);
 	poll();
 </script>
